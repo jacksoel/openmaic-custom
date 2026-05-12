@@ -1,15 +1,17 @@
 services:
   openmaic:
     build: .
-    ports:
-      - "3000:3000"
     env_file:
       - .env.local
+    ports:
+      - "127.0.0.1:3001:3000"
     volumes:
       # Optional: mount server-providers.yml for provider config
       # - ./server-providers.yml:/app/server-providers.yml:ro
       - openmaic-data:/app/data
+      - openmaic-auth-db:/app/data/auth
     restart: unless-stopped
 
 volumes:
   openmaic-data:
+  openmaic-auth-db:

@@ -23,6 +23,7 @@ import { useStageStore } from '@/lib/store/stage';
 import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useExportPPTX } from '@/lib/export/use-export-pptx';
 import { useExportClassroom } from '@/lib/export/use-export-classroom';
+import { AuthNav } from './auth/auth-nav';
 
 interface HeaderProps {
   readonly currentSceneTitle: string;
@@ -78,7 +79,7 @@ export function Header({ currentSceneTitle }: HeaderProps) {
       <header className="h-20 px-8 flex items-center justify-between z-10 bg-transparent gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/dashboard')}
             className="shrink-0 p-2 rounded-lg text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             title={t('generation.backToHome')}
           >
@@ -175,6 +176,9 @@ export function Header({ currentSceneTitle }: HeaderProps) {
             </button>
           </div>
         </div>
+
+        {/* Auth Nav (My AI Stack / Admin / Sign Out) */}
+        {process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true' && <AuthNav />}
 
         {/* Export Dropdown */}
         <div className="relative" ref={exportRef}>

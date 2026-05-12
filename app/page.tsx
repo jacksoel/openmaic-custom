@@ -32,6 +32,7 @@ import { InputGroup, InputGroupInput, InputGroupButton } from '@/components/ui/i
 import { Textarea as UITextarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/settings';
+import { AuthNav } from '@/components/auth/auth-nav';
 import { GenerationToolbar } from '@/components/generation/generation-toolbar';
 import { AgentBar } from '@/components/agent/agent-bar';
 import { useTheme } from '@/lib/hooks/use-theme';
@@ -472,6 +473,14 @@ function HomePage() {
             <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
           </button>
         </div>
+
+        {/* Auth nav — only when auth is enabled (user identity + My Classrooms + Sign Out) */}
+        {process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true' && (
+          <>
+            <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
+            <AuthNav />
+          </>
+        )}
       </div>
       <SettingsDialog
         open={settingsOpen}

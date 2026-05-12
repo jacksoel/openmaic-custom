@@ -276,7 +276,7 @@ function logConfig(config: ServerConfig, label: string): void {
   }
 }
 
-function getConfig(): ServerConfig {
+export function getConfig(): ServerConfig {
   const cached = _configs.get('');
   if (cached) return cached;
 

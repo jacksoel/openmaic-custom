@@ -1,0 +1,20 @@
+# OpenMAIC Multi-Tenant Extension — Docker Compose Overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose.openmaic.yml up -d
+#
+# This overlay adds:
+# - Port mapping 3001:3000 (avoid conflict with Grafana on 3000)
+# - Auth database volume (persistent SQLite)
+# - All auth env vars come from .env.local (not duplicated here)
+
+services:
+  openmaic:
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - openmaic-data:/app/data
+      - openmaic-auth-db:/app/data/auth
+    restart: unless-stopped
+
+volumes:
+  openmaic-data:
+  openmaic-auth-db:

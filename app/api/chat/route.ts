@@ -3,23 +3,26 @@
  *
  * POST /api/chat - Send message, receive SSE stream
  *
- * This endpoint:
- * 1. Receives full state from client (messages + storeState)
- * 2. Runs single-pass generation
- * 3. Streams events as SSE (text deltas + tool calls)
- *
- * Fully stateless: interruption is handled by the client aborting
- * the fetch request, which triggers req.signal on the server side.
+ * When AUTH_ENABLED=true:
+ *   - If user has a provider configured in user_providers, it overrides any
+ *     client-sent API key for that provider.
+ *   - If no user provider, falls back to institutional (server-providers.yml/env).
+ *   - Students can only use institutional providers.
  */
 
 import { NextRequest } from 'next/server';
 import { statelessGenerate } from '@/lib/orchestration/stateless-generate';
-import { isProviderKeyRequired } from '@/lib/ai/providers';
+import { isProviderKeyRequired, parseModelString } from '@/lib/ai/providers';
 import type { StatelessChatRequest, StatelessEvent } from '@/lib/types/chat';
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModel } from '@/lib/server/resolve-model';
+import { resolveProvider, canUseProvider } from '@/lib/server/provider-resolver';
 import type { ThinkingConfig } from '@/lib/types/provider';
+import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
+import { getConfig } from '@/lib/server/provider-config';
+import { logUsageDeferred } from '@/lib/server/usage-logger';
+
 const log = createLogger('Chat API');
 
 // Allow streaming responses up to 60 seconds
@@ -28,18 +31,6 @@ export const maxDuration = 60;
 /**
  * POST /api/chat
  * Send a message and receive SSE stream of generation events
- *
- * Request body: StatelessChatRequest
- * {
- *   messages: UIMessage[],
- *   storeState: { stage, scenes, currentSceneId, mode },
- *   config: { agentIds, sessionType? },
- *   apiKey: string,
- *   baseUrl?: string,
- *   model?: string
- * }
- *
- * Response: SSE stream of StatelessEvent
  */
 export async function POST(req: NextRequest) {
   const encoder = new TextEncoder();
@@ -64,14 +55,59 @@ export async function POST(req: NextRequest) {
       return apiError('MISSING_REQUIRED_FIELD', 400, 'Missing required field: config.agentIds');
     }
 
+    // -----------------------------------------------------------------------
+    // Auth-aware provider resolution
+    // -----------------------------------------------------------------------
+    const authEnabled = process.env.AUTH_ENABLED === 'true';
+    const user = await getSessionUser(req);
+
+    let effectiveApiKey = body.apiKey;
+    let effectiveBaseUrl = body.baseUrl;
+    let effectiveModel = body.model;
+
+    if (authEnabled && user) {
+      // Parse the model string to determine the provider
+      const { providerId } = parseModelString(body.model || '');
+
+      // Get full server config (with apiKeys) for provider resolution
+      const serverConfig = getConfig();
+
+      // Try user's own provider first, then institutional default
+      const resolved = resolveProvider(user.id, providerId, serverConfig);
+
+      if (resolved) {
+        // Check role permissions
+        if (!canUseProvider(user.role, resolved.source)) {
+          return apiError('INVALID_REQUEST', 403,
+            'Students can only use institutional AI providers. Contact your instructor for access.');
+        }
+
+        // Override with resolved provider
+        effectiveApiKey = resolved.apiKey;
+        if (resolved.baseUrl) effectiveBaseUrl = resolved.baseUrl;
+        if (resolved.defaultModel && !body.model) {
+          effectiveModel = resolved.defaultModel;
+        }
+
+        log.info(`Using ${resolved.source} provider for user ${user.id}: ${providerId}`);
+      } else if (!effectiveApiKey) {
+        // No provider available
+        return apiError('MISSING_API_KEY', 401,
+          `No API key configured for ${providerId}. ` +
+          (isInstructorOrAbove(user)
+            ? 'Configure your API key in Settings > My AI Stack.'
+            : 'Contact your instructor to configure institutional AI providers.'));
+      }
+    }
+
     const {
       model: languageModel,
       apiKey: resolvedApiKey,
       providerId,
     } = await resolveModel({
-      modelString: body.model,
-      apiKey: body.apiKey,
-      baseUrl: body.baseUrl,
+      modelString: effectiveModel,
+      apiKey: effectiveApiKey,
+      baseUrl: effectiveBaseUrl,
       providerType: body.providerType,
     });
 
@@ -94,8 +130,6 @@ export async function POST(req: NextRequest) {
     // Stream generation in background with heartbeat to prevent connection timeout
     const HEARTBEAT_INTERVAL_MS = 15_000;
     (async () => {
-      // Heartbeat: periodically send SSE comments to keep the connection alive.
-      // Proxies / browsers may close idle SSE connections after 30-120s of silence.
       let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
       const startHeartbeat = () => {
         stopHeartbeat();
@@ -117,8 +151,6 @@ export async function POST(req: NextRequest) {
       try {
         startHeartbeat();
 
-        // Default: thinking disabled for low-latency chat. UI requests send
-        // `thinkingConfig`; eval harnesses can still opt in via `thinking`.
         const thinkingConfig: ThinkingConfig = body.thinkingConfig ??
           body.thinking ?? { mode: 'disabled', enabled: false };
 
@@ -142,12 +174,24 @@ export async function POST(req: NextRequest) {
           await writer.write(encoder.encode(data));
         }
 
+        // Phase 4.2: Log LLM usage after stream completes
+        if (authEnabled && user && providerId) {
+          try {
+            logUsageDeferred({
+              userId: user.id,
+              providerSlug: providerId,
+              model: body.model || 'unknown',
+              inputTokens: 0, // Enhanced in Phase 4.5 with actual token counts
+              outputTokens: 0,
+            });
+          } catch { /* best-effort */ }
+        }
+
         stopHeartbeat();
         await writer.close();
       } catch (error) {
         stopHeartbeat();
 
-        // If aborted, just close the writer silently
         if (signal.aborted) {
           log.info('Request aborted during streaming');
           try {
@@ -163,7 +207,6 @@ export async function POST(req: NextRequest) {
           error,
         );
 
-        // Try to send error event
         try {
           const errorEvent: StatelessEvent = {
             type: 'error',

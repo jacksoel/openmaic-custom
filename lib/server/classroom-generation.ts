@@ -44,6 +44,10 @@ export interface GenerateClassroomInput {
   enableVideoGeneration?: boolean;
   enableTTS?: boolean;
   agentMode?: 'default' | 'generate';
+  // Auth-resolved provider overrides (set by route handler)
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
 }
 
 export type ClassroomGenerationStep =
@@ -182,7 +186,11 @@ export async function generateClassroom(
     modelString,
     providerId,
     apiKey,
-  } = await resolveModel({});
+  } = await resolveModel({
+    modelString: input.model,
+    apiKey: input.apiKey,
+    baseUrl: input.baseUrl,
+  });
   log.info(`Using server-configured model: ${modelString}`);
 
   // Fail fast if the resolved provider has no API key configured

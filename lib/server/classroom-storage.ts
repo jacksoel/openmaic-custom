@@ -34,11 +34,27 @@ export function buildRequestOrigin(req: NextRequest): string {
     : req.nextUrl.origin;
 }
 
+// ---------------------------------------------------------------------------
+// Classroom data types (extended with ownership)
+// ---------------------------------------------------------------------------
+
+export type ClassroomVisibility = 'public' | 'enrolled' | 'private';
+
 export interface PersistedClassroomData {
   id: string;
   stage: Stage;
   scenes: Scene[];
   createdAt: string;
+  /** Owner user ID (instructor who created this classroom) */
+  ownerId?: string;
+  /** Owner role at time of creation */
+  ownerRole?: string;
+  /** Who can see this classroom */
+  visibility?: ClassroomVisibility;
+  /** User IDs of enrolled students */
+  enrolledUserIds?: string[];
+  /** Display name of owner (for UI) */
+  ownerName?: string;
 }
 
 export function isValidClassroomId(id: string): boolean {
@@ -63,6 +79,11 @@ export async function persistClassroom(
     id: string;
     stage: Stage;
     scenes: Scene[];
+    ownerId?: string;
+    ownerRole?: string;
+    ownerName?: string;
+    visibility?: ClassroomVisibility;
+    enrolledUserIds?: string[];
   },
   baseUrl: string,
 ): Promise<PersistedClassroomData & { url: string }> {
@@ -71,6 +92,11 @@ export async function persistClassroom(
     stage: data.stage,
     scenes: data.scenes,
     createdAt: new Date().toISOString(),
+    ownerId: data.ownerId,
+    ownerRole: data.ownerRole,
+    ownerName: data.ownerName,
+    visibility: data.visibility || 'enrolled',
+    enrolledUserIds: data.enrolledUserIds || [],
   };
 
   await ensureClassroomsDir();
@@ -81,4 +107,107 @@ export async function persistClassroom(
     ...classroomData,
     url: `${baseUrl}/classroom/${data.id}`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Access control helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Check if a user can view a classroom.
+ * - Admins can view everything
+ * - Owner can always view
+ * - Public classrooms: any authenticated user
+ * - Enrolled: user is in enrolledUserIds
+ * - Private: only owner and admin
+ */
+export function canViewClassroom(
+  classroom: PersistedClassroomData,
+  userId: string | null | undefined,
+  userRole: string | null | undefined,
+): boolean {
+  // Admin sees everything
+  if (userRole === 'admin') return true;
+
+  // Owner always sees their own
+  if (userId && classroom.ownerId === userId) return true;
+
+  // Legacy classrooms (created before multi-tenant) have no visibility field.
+  // Default them to 'public' so existing classrooms remain accessible to all authenticated users.
+  const visibility = classroom.visibility ?? 'public';
+
+  if (visibility === 'public') {
+    return !!userId; // any authenticated user
+  }
+
+  if (visibility === 'enrolled') {
+    return !!userId && !!(classroom.enrolledUserIds || []).includes(userId);
+  }
+
+  // private: only owner/admin (already checked above)
+  return false;
+}
+
+/**
+ * Check if a user can edit a classroom.
+ * Only owner or admin can edit.
+ */
+export function canEditClassroom(
+  classroom: PersistedClassroomData,
+  userId: string | null | undefined,
+  userRole: string | null | undefined,
+): boolean {
+  if (userRole === 'admin') return true;
+  if (userId && classroom.ownerId === userId) return true;
+  return false;
+}
+
+/**
+ * Enroll a user in a classroom (adds to enrolledUserIds).
+ */
+export async function enrollUserInClassroom(
+  classroomId: string,
+  userId: string,
+): Promise<boolean> {
+  const classroom = await readClassroom(classroomId);
+  if (!classroom) return false;
+
+  const enrolled = classroom.enrolledUserIds || [];
+  if (enrolled.includes(userId)) return true; // already enrolled
+
+  enrolled.push(userId);
+  classroom.enrolledUserIds = enrolled;
+
+  const filePath = path.join(CLASSROOMS_DIR, `${classroomId}.json`);
+  await writeJsonFileAtomic(filePath, classroom);
+  return true;
+}
+
+/**
+ * List classrooms accessible by a user.
+ */
+export async function listClassroomsForUser(
+  userId: string | null | undefined,
+  userRole: string | null | undefined,
+): Promise<PersistedClassroomData[]> {
+  await ensureClassroomsDir();
+  const files = await fs.readdir(CLASSROOMS_DIR);
+  const jsonFiles = files.filter(f => f.endsWith('.json'));
+
+  const classrooms: PersistedClassroomData[] = [];
+  for (const file of jsonFiles) {
+    try {
+      const content = await fs.readFile(path.join(CLASSROOMS_DIR, file), 'utf-8');
+      const classroom = JSON.parse(content) as PersistedClassroomData;
+      if (canViewClassroom(classroom, userId, userRole)) {
+        classrooms.push(classroom);
+      }
+    } catch {
+      // Skip corrupted files
+    }
+  }
+
+  return classrooms.sort((a, b) =>
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 }

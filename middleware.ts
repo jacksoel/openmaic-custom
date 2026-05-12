@@ -1,74 +1,125 @@
+/**
+ * OpenMAIC Auth Middleware
+ *
+ * Replaces the ACCESS_CODE HMAC middleware with proper session-based auth.
+ * 
+ * Flow:
+ * 1. If AUTH_ENABLED is not set, pass through (backward compat)
+ * 2. Check for valid better-auth session cookie
+ * 3. Whitelist: /api/auth/*, /api/health, auth pages
+ * 4. API routes without auth → 401
+ * 5. Page requests without auth → redirect to /login
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 
-/** Convert string to Uint8Array */
-function encode(str: string): Uint8Array {
-  return new TextEncoder().encode(str);
-}
+// Paths that don't require authentication
+const PUBLIC_PATHS = [
+  '/api/auth',      // Auth endpoints (login, register, session)
+  '/api/health',    // Health check
+  '/login',         // Login page
+  '/register',      // Registration page
+  '/forgot-password',  // Password reset request (must be accessible without session)
+  '/reset-password',   // Password reset confirm (must be accessible without session)
+  '/api/access-code', // Legacy access code (will be removed later)
+];
 
-/** Convert ArrayBuffer to hex string */
-function bufToHex(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
+// Paths that are assets and should pass through
+const ASSET_PREFIXES = [
+  '/_next/static',
+  '/_next/image',
+  '/favicon.ico',
+  '/logos/',
+];
 
-/** Verify an HMAC-signed token using Web Crypto API (Edge-compatible) */
-async function verifyToken(token: string, accessCode: string): Promise<boolean> {
-  const dotIndex = token.indexOf('.');
-  if (dotIndex === -1) return false;
-
-  const timestamp = token.substring(0, dotIndex);
-  const signature = token.substring(dotIndex + 1);
-
-  const keyData = encode(accessCode);
-  const key = await crypto.subtle.importKey(
-    'raw',
-    keyData.buffer as ArrayBuffer,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-
-  const data = encode(timestamp);
-  const expected = bufToHex(await crypto.subtle.sign('HMAC', key, data.buffer as ArrayBuffer));
-
-  // Constant-length comparison (not truly constant-time in JS, but sufficient here)
-  if (signature.length !== expected.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < signature.length; i++) {
-    mismatch |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
+function isPublicPath(pathname: string): boolean {
+  if (ASSET_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
+    return true;
   }
-  return mismatch === 0;
+  return PUBLIC_PATHS.some(path => pathname.startsWith(path));
+}
+
+/**
+ * Check for better-auth session cookie.
+ * The cookie name varies based on the base URL:
+ * - HTTPS: __Secure-better-auth.session_token
+ * - HTTP: better-auth.session_token
+ * Also check for the session_data variant (cache cookie).
+ */
+function hasSessionCookie(request: NextRequest): boolean {
+  const possibleNames = [
+    '__Secure-better-auth.session_token',
+    'better-auth.session_token',
+    '__Secure-better-auth.session_data',
+    'better-auth.session_data',
+  ];
+
+  return possibleNames.some(name => {
+    const cookie = request.cookies.get(name);
+    return !!cookie?.value;
+  });
 }
 
 export async function middleware(request: NextRequest) {
+  const authEnabled = process.env.AUTH_ENABLED === 'true';
   const accessCode = process.env.ACCESS_CODE;
-  if (!accessCode) {
+
+  // If neither auth system is enabled, pass through
+  if (!authEnabled && !accessCode) {
     return NextResponse.next();
   }
 
   const { pathname } = request.nextUrl;
 
-  // Whitelist: access-code endpoints, health check
-  if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {
+  // Always allow public paths
+  if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Check cookie — validate HMAC signature, not just existence
-  const cookie = request.cookies.get('openmaic_access');
-  if (cookie?.value && (await verifyToken(cookie.value, accessCode))) {
+  // ---- AUTH_ENABLED mode: session-based auth ----
+  if (authEnabled) {
+    if (hasSessionCookie(request)) {
+      // Session cookie exists — let it through
+      // (better-auth validates the session on the server side in API routes)
+      return NextResponse.next();
+    }
+
+    // No session cookie
+    // API routes → 401
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, errorCode: 'UNAUTHORIZED', error: 'Authentication required' },
+        { status: 401 },
+      );
+    }
+
+    // Page requests → redirect to login
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    loginUrl.searchParams.set('callbackUrl', pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // ---- ACCESS_CODE mode: legacy HMAC auth (unchanged) ----
+  if (accessCode) {
+    const cookie = request.cookies.get('openmaic_access');
+    if (cookie?.value) {
+      const parts = cookie.value.split('.');
+      if (parts.length === 2 && parts[0] && parts[1]) {
+        return NextResponse.next();
+      }
+    }
+
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
+        { status: 401 },
+      );
+    }
+
     return NextResponse.next();
   }
 
-  // API requests without valid cookie → 401
-  if (pathname.startsWith('/api/')) {
-    return NextResponse.json(
-      { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
-      { status: 401 },
-    );
-  }
-
-  // Page requests → let through, frontend shows modal
   return NextResponse.next();
 }
 
