@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Key, BarChart3 } from 'lucide-react';
+import { Key, BarChart3, Shield, Users } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface UserRecord {
@@ -102,6 +102,20 @@ export default function AdminPage() {
             >
               <BarChart3 className="w-3.5 h-3.5" />
               Usage Dashboard
+            </button>
+            <button
+              onClick={() => router.push('/admin/bulk-provision')}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <Users className="w-3.5 h-3.5" />
+              Bulk Provision
+            </button>
+            <button
+              onClick={() => router.push('/admin/policy')}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              Policy
             </button>
             <button
               onClick={() => router.push('/')}

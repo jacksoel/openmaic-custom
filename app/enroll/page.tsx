@@ -181,7 +181,7 @@ function EnrollForm() {
           {enrolled ? (
             <div className="space-y-4 text-center">
               <div className="rounded-lg border border-green-200 bg-green-50 p-5">
-                <p className="font-medium text-green-700">Enrollment confirmed</p>
+                <p className="font-medium text-green-700">Enrolled in {preview?.name || 'classroom'}! Redirecting to dashboard...</p>
                 <p className="mt-1 text-sm text-green-600">
                   Redirecting you to your dashboard in 2 seconds.
                 </p>

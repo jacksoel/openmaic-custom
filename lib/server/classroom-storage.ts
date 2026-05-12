@@ -55,6 +55,14 @@ export interface PersistedClassroomData {
   enrolledUserIds?: string[];
   /** Display name of owner (for UI) */
   ownerName?: string;
+  /** Per-classroom provider/model override. Set by instructor at classroom creation or edit time.
+   * When set, resolveProvider uses this slug and model instead of the user default.
+   * Key resolution still follows: classroom owner user key -> institutional -> error.
+   */
+  classroomProviderConfig?: {
+    providerSlug: string;
+    defaultModel?: string;
+  };
 }
 
 export function isValidClassroomId(id: string): boolean {
@@ -84,6 +92,10 @@ export async function persistClassroom(
     ownerName?: string;
     visibility?: ClassroomVisibility;
     enrolledUserIds?: string[];
+    classroomProviderConfig?: {
+      providerSlug: string;
+      defaultModel?: string;
+    };
   },
   baseUrl: string,
 ): Promise<PersistedClassroomData & { url: string }> {
@@ -97,6 +109,7 @@ export async function persistClassroom(
     ownerName: data.ownerName,
     visibility: data.visibility || 'enrolled',
     enrolledUserIds: data.enrolledUserIds || [],
+    classroomProviderConfig: data.classroomProviderConfig,
   };
 
   await ensureClassroomsDir();

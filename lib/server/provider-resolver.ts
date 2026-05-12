@@ -51,8 +51,14 @@ interface ServerProviderConfig {
 export function resolveProvider(
   userId: string | null | undefined,
   providerSlug: string,
-  serverConfig: ServerProviderConfig
+  serverConfig: ServerProviderConfig,
+  classroomProviderConfig?: { providerSlug: string; defaultModel?: string }
 ): ResolvedProvider | null {
+  // Per-classroom provider override takes precedence over user's default provider slug
+  if (classroomProviderConfig) {
+    providerSlug = classroomProviderConfig.providerSlug;
+  }
+
   // 1. Check user's own provider config (if authenticated)
   if (userId) {
     try {
@@ -66,7 +72,7 @@ export function resolveProvider(
         return {
           providerSlug,
           apiKey,
-          defaultModel: row.defaultModel || undefined,
+          defaultModel: row.defaultModel || classroomProviderConfig?.defaultModel || undefined,
           source: 'user',
           limits: row.limits ? JSON.parse(row.limits) : undefined,
         };
@@ -84,7 +90,7 @@ export function resolveProvider(
       providerSlug,
       apiKey: serverProvider.apiKey,
       baseUrl: serverProvider.baseUrl || undefined,
-      defaultModel: serverProvider.defaultModel || undefined,
+      defaultModel: serverProvider.defaultModel || classroomProviderConfig?.defaultModel || undefined,
       source: 'institutional',
     };
   }
@@ -108,4 +114,120 @@ export function canUseProvider(
   if (userRole === 'admin' || userRole === 'instructor') return true;
 
   return false;
+}
+export interface QuotaResult {
+  allowed: boolean;
+  used: number;
+  limit: number | null;
+  resetAt?: string;
+}
+
+/**
+ * Check daily token quota for a user+provider combination.
+ *
+ * @param userId - The authenticated user's ID
+ * @param providerSlug - Which provider to check (e.g., 'openai')
+ * @param requestedTokens - Tokens about to be consumed (0 for pre-call check)
+ * @returns QuotaResult with allowed flag, current usage, and limit info
+ */
+export function checkQuota(
+  userId: string,
+  providerSlug: string,
+  requestedTokens: number
+): QuotaResult {
+  try {
+    const db = getDb();
+
+    // Look up limits for this user+provider
+    const row = db.prepare(
+      'SELECT limits FROM user_providers WHERE userId = ? AND providerSlug = ?'
+    ).get(userId, providerSlug) as { limits: string | null } | undefined;
+
+    // No provider row — no limits configured
+    if (!row) {
+      return { allowed: true, used: 0, limit: null };
+    }
+
+    const limits: { maxTokensPerDay?: number; maxTokensPerRequest?: number } =
+      row.limits ? JSON.parse(row.limits) : {};
+
+    // If no maxTokensPerDay, nothing to enforce
+    if (!limits.maxTokensPerDay) {
+      return { allowed: true, used: 0, limit: null };
+    }
+
+    const maxTokensPerDay = limits.maxTokensPerDay;
+
+    // Sum today's usage (inputTokens + outputTokens)
+    const usageRow = db.prepare(
+      `SELECT COALESCE(SUM(inputTokens + outputTokens), 0) AS total
+       FROM usage_logs
+       WHERE userId = ? AND providerSlug = ? AND createdAt >= date('now')`
+    ).get(userId, providerSlug) as { total: number };
+
+    const dailyUsed = usageRow?.total ?? 0;
+
+    if (dailyUsed + requestedTokens > maxTokensPerDay) {
+      return {
+        allowed: false,
+        used: dailyUsed,
+        limit: maxTokensPerDay,
+        resetAt: 'tomorrow midnight UTC',
+      };
+    }
+
+    return { allowed: true, used: dailyUsed, limit: maxTokensPerDay };
+  } catch (error) {
+    console.error('[ProviderResolver] checkQuota error:', error);
+    // Fail open — don't block requests if quota check fails
+    return { allowed: true, used: 0, limit: null };
+  }
+}
+
+/**
+ * Check per-request token quota against limits.maxTokensPerRequest.
+ *
+ * @param userId - The authenticated user's ID
+ * @param providerSlug - Which provider to check
+ * @param requestedTokens - Tokens requested for this single call
+ * @returns QuotaResult with allowed flag and limit info
+ */
+export function checkRequestQuota(
+  userId: string,
+  providerSlug: string,
+  requestedTokens: number
+): QuotaResult {
+  try {
+    const db = getDb();
+
+    const row = db.prepare(
+      'SELECT limits FROM user_providers WHERE userId = ? AND providerSlug = ?'
+    ).get(userId, providerSlug) as { limits: string | null } | undefined;
+
+    if (!row) {
+      return { allowed: true, used: 0, limit: null };
+    }
+
+    const limits: { maxTokensPerDay?: number; maxTokensPerRequest?: number } =
+      row.limits ? JSON.parse(row.limits) : {};
+
+    if (!limits.maxTokensPerRequest) {
+      return { allowed: true, used: 0, limit: null };
+    }
+
+    const maxTokensPerRequest = limits.maxTokensPerRequest;
+
+    if (requestedTokens > maxTokensPerRequest) {
+      return {
+        allowed: false,
+        used: requestedTokens,
+        limit: maxTokensPerRequest,
+      };
+    }
+
+    return { allowed: true, used: requestedTokens, limit: maxTokensPerRequest };
+  } catch (error) {
+    console.error('[ProviderResolver] checkRequestQuota error:', error);
+    return { allowed: true, used: 0, limit: null };
+  }
 }

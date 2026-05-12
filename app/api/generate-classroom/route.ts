@@ -7,7 +7,7 @@ import { createClassroomGenerationJob } from '@/lib/server/classroom-job-store';
 import { buildRequestOrigin } from '@/lib/server/classroom-storage';
 import { createLogger } from '@/lib/logger';
 import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
-import { resolveProvider, canUseProvider } from '@/lib/server/provider-resolver';
+import { resolveProvider, canUseProvider, checkQuota } from '@/lib/server/provider-resolver';
 import { getConfig } from '@/lib/server/provider-config';
 import { parseModelString } from '@/lib/ai/providers';
 import { logUsageDeferred } from '@/lib/server/usage-logger';
@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
           effectiveModel = resolved.defaultModel;
         }
         log.info(`Using ${resolved.source} provider for user ${user.id}: ${providerId}`);
+
+        // Quota enforcement
+        const quotaResult = checkQuota(user.id, providerId, 0);
+        if (!quotaResult.allowed) {
+          return apiError(API_ERROR_CODES.INVALID_REQUEST, 429,
+            `Daily token quota exceeded for ${providerId}. Used: ${quotaResult.used}/${quotaResult.limit}. Resets tomorrow.`);
+        }
       }
     }
 

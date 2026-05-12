@@ -14,10 +14,10 @@ import { NextRequest } from 'next/server';
 import { statelessGenerate } from '@/lib/orchestration/stateless-generate';
 import { isProviderKeyRequired, parseModelString } from '@/lib/ai/providers';
 import type { StatelessChatRequest, StatelessEvent } from '@/lib/types/chat';
-import { apiError } from '@/lib/server/api-response';
+import { apiError, API_ERROR_CODES } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModel } from '@/lib/server/resolve-model';
-import { resolveProvider, canUseProvider } from '@/lib/server/provider-resolver';
+import { resolveProvider, canUseProvider, checkQuota } from '@/lib/server/provider-resolver';
 import type { ThinkingConfig } from '@/lib/types/provider';
 import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
 import { getConfig } from '@/lib/server/provider-config';
@@ -90,6 +90,13 @@ export async function POST(req: NextRequest) {
         }
 
         log.info(`Using ${resolved.source} provider for user ${user.id}: ${providerId}`);
+
+        // Quota enforcement
+        const quotaResult = checkQuota(user.id, providerId, 0);
+        if (!quotaResult.allowed) {
+          return apiError(API_ERROR_CODES.INVALID_REQUEST, 429,
+            `Daily token quota exceeded for ${providerId}. Used: ${quotaResult.used}/${quotaResult.limit}. Resets tomorrow.`);
+        }
       } else if (!effectiveApiKey) {
         // No provider available
         return apiError('MISSING_API_KEY', 401,

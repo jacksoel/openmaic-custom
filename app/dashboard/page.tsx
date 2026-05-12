@@ -42,6 +42,7 @@ function DashboardContent() {
   const [classrooms, setClassrooms] = useState<EnrolledClassroom[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [newEnrollmentCount, setNewEnrollmentCount] = useState(0);
 
   useEffect(() => {
     async function loadData() {
@@ -60,7 +61,16 @@ function DashboardContent() {
         const res = await fetch("/api/user/enrollments");
         if (res.ok) {
           const data = await res.json();
-          setClassrooms(data.classrooms || []);
+          const fetchedClassrooms = data.classrooms || [];
+          setClassrooms(fetchedClassrooms);
+          // Check for new enrollments since last visit
+          const currentCount = fetchedClassrooms.length;
+          const lastSeen = parseInt(localStorage.getItem('lastSeenEnrollmentCount') || '0', 10);
+          if (currentCount > lastSeen && lastSeen > 0) {
+            setNewEnrollmentCount(currentCount - lastSeen);
+          }
+          // Update stored count
+          localStorage.setItem('lastSeenEnrollmentCount', String(currentCount));
         } else {
           setError("Failed to load classrooms.");
         }
@@ -117,8 +127,26 @@ function DashboardContent() {
             >
               Join a Classroom
             </button>
+            <button
+              onClick={() => router.push("/catalog")}
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50"
+            >
+              Browse Classrooms
+            </button>
           </div>
         </div>
+
+        {newEnrollmentCount > 0 && (
+          <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700 flex items-center justify-between">
+            <span>You have been enrolled in {newEnrollmentCount} new classroom{newEnrollmentCount === 1 ? '' : 's'}.</span>
+            <button
+              onClick={() => setNewEnrollmentCount(0)}
+              className="ml-4 text-green-500 hover:text-green-700 font-medium"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">

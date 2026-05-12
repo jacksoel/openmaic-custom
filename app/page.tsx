@@ -33,6 +33,7 @@ import { Textarea as UITextarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { SettingsDialog } from '@/components/settings';
 import { AuthNav } from '@/components/auth/auth-nav';
+import { authClient } from '@/lib/auth-client';
 import { GenerationToolbar } from '@/components/generation/generation-toolbar';
 import { AgentBar } from '@/components/agent/agent-bar';
 import { useTheme } from '@/lib/hooks/use-theme';
@@ -82,7 +83,24 @@ function HomePage() {
   const { t } = useI18n();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
+  const [authRedirectChecked, setAuthRedirectChecked] = useState(false);
   const [form, setForm] = useState<FormState>(initialFormState);
+
+  // Redirect students to /dashboard when auth is enabled
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== 'true') {
+      setAuthRedirectChecked(true);
+      return;
+    }
+    authClient.getSession().then((session: any) => {
+      const role = session?.data?.user?.role;
+      if (role === 'student' || role === 'user') {
+        router.push('/dashboard');
+      } else {
+        setAuthRedirectChecked(true);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<
     import('@/lib/types/settings').SettingsSection | undefined
@@ -375,6 +393,11 @@ function HomePage() {
   };
 
   const canGenerate = !!form.requirement.trim();
+
+  // Loading guard — prevents flash before redirect for students
+  if (process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true' && !authRedirectChecked) {
+    return null;
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {

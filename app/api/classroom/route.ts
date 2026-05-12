@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { stage, scenes } = body;
+    const { stage, scenes, classroomProviderConfig } = body;
     stageId = stage?.id;
     sceneCount = scenes?.length;
 
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
         ownerName: user?.name || undefined,
         visibility: body.visibility || 'enrolled',
         enrolledUserIds: body.enrolledUserIds || [],
+        classroomProviderConfig: body.classroomProviderConfig || undefined,
       },
       baseUrl,
     );
