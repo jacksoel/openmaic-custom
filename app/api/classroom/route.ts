@@ -7,6 +7,7 @@ import {
   persistClassroom,
   readClassroom,
   canViewClassroom,
+  canEditClassroom,
   listClassroomsForUser,
 } from '@/lib/server/classroom-storage';
 import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
@@ -50,6 +51,21 @@ export async function POST(request: NextRequest) {
     }
 
     const id = stage.id || randomUUID();
+
+    // Ownership guard: if a classroom with this ID already exists, only its owner
+    // (or an admin) may overwrite it. Without this check any instructor can POST
+    // with an existing ID and silently hijack another user's classroom.
+    if (authEnabled) {
+      const existingClassroom = await readClassroom(id);
+      if (existingClassroom && !canEditClassroom(existingClassroom, user?.id, user?.role)) {
+        return apiError(
+          API_ERROR_CODES.INVALID_REQUEST,
+          403,
+          'You do not have permission to modify this classroom',
+        );
+      }
+    }
+
     const baseUrl = buildRequestOrigin(request);
 
     const persisted = await persistClassroom(
