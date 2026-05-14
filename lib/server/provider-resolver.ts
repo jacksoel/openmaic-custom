@@ -11,7 +11,7 @@
  */
 
 import { getDb } from './auth-db';
-import { encryptApiKey, decryptApiKey } from './encryption';
+import { decryptApiKey } from './encryption';
 
 interface ResolvedProvider {
   /** Provider slug (e.g., 'openai', 'google', 'deepseek') */
@@ -100,21 +100,32 @@ export function resolveProvider(
 }
 
 /**
- * Check if a user can use a given provider.
- * Students can only use institutional providers; instructors/admins can use their own.
+ * Check if a user role can use a provider from the given source.
+ *
+ * Institutional key access is controlled by INSTITUTIONAL_KEY_ROLES env var:
+ *   - Unset or 'all' (default): any authenticated user may use institutional keys
+ *   - 'instructor,admin': only those roles; students are blocked
+ *
+ * Personal keys are always restricted to instructor and above (students cannot
+ * add rows to user_providers via the API).
  */
 export function canUseProvider(
   userRole: string | null | undefined,
   providerSource: 'user' | 'institutional'
 ): boolean {
-  // Institutional providers are available to all authenticated users
-  if (providerSource === 'institutional') return true;
+  if (providerSource === 'institutional') {
+    const allowed = process.env.INSTITUTIONAL_KEY_ROLES;
+    if (!allowed || allowed.trim() === '' || allowed.trim().toLowerCase() === 'all') return true;
+    const roles = allowed.split(',').map(r => r.trim().toLowerCase()).filter(Boolean);
+    const role = (userRole || 'student').toLowerCase();
+    // Normalise better-auth default role name
+    return roles.includes(role === 'user' ? 'student' : role);
+  }
 
-  // Own providers: only instructors and above (Phase 1: conservative)
-  if (userRole === 'admin' || userRole === 'instructor') return true;
-
-  return false;
+  // Personal keys: instructors and admins only
+  return userRole === 'admin' || userRole === 'instructor';
 }
+
 export interface QuotaResult {
   allowed: boolean;
   used: number;

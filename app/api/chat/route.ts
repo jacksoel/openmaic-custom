@@ -7,7 +7,7 @@
  *   - If user has a provider configured in user_providers, it overrides any
  *     client-sent API key for that provider.
  *   - If no user provider, falls back to institutional (server-providers.yml/env).
- *   - Students can only use institutional providers.
+ *   - Students can only use institutional providers (unless INSTITUTIONAL_KEY_ROLES restricts further).
  */
 
 import { NextRequest } from 'next/server';
@@ -78,8 +78,10 @@ export async function POST(req: NextRequest) {
       if (resolved) {
         // Check role permissions
         if (!canUseProvider(user.role, resolved.source)) {
-          return apiError('INVALID_REQUEST', 403,
-            'Students can only use institutional AI providers. Contact your instructor for access.');
+          const msg = resolved.source === 'institutional'
+            ? `Your role does not have access to institutional AI providers. Contact your administrator.`
+            : `Only instructors and admins can use personal AI provider keys.`;
+          return apiError('INVALID_REQUEST', 403, msg);
         }
 
         // Override with resolved provider
