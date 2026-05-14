@@ -27,7 +27,7 @@ export default function AdminPage() {
     try {
       const res = await fetch('/api/admin/users');
       if (!res.ok) {
-        if (res.status === 401) { router.push('/login'); return; }
+        if (res.status === 401) { router.push('/login?callbackUrl=/admin'); return; }
         if (res.status === 403) { router.push('/dashboard'); return; }
         throw new Error('Failed to fetch users');
       }
@@ -65,7 +65,7 @@ export default function AdminPage() {
             <button onClick={() => router.push('/admin/usage')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" />Usage Dashboard</button>
             <button onClick={() => router.push('/admin/bulk-provision')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><Users className="w-3.5 h-3.5" />Bulk Provision</button>
             <button onClick={() => router.push('/admin/policy')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><Shield className="w-3.5 h-3.5" />Policy</button>
-            <button onClick={() => router.push('/')} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">← Back to App</button>
+            <button onClick={() => router.push('/dashboard')} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">← Dashboard</button>
             <ThemeToggle />
           </div>
         </div>
@@ -90,9 +90,12 @@ export default function AdminPage() {
                   {user.institution && <p className="text-xs text-gray-400 dark:text-gray-500">{user.institution}</p>}
                 </div>
                 <div className="ml-4 flex items-center gap-2">
-                  <select value={user.role} onChange={e => { if (e.target.value !== user.role) setPendingRoleChange({ userId: user.id, newRole: e.target.value }); }}
+                  <select
+                    value={user.role}
+                    onChange={e => { if (e.target.value !== user.role) setPendingRoleChange({ userId: user.id, newRole: e.target.value }); }}
                     disabled={updating === user.id}
-                    className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50">
+                    className="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50"
+                  >
                     <option value="admin">Admin</option>
                     <option value="instructor">Instructor</option>
                     <option value="student">Student</option>
@@ -108,9 +111,11 @@ export default function AdminPage() {
         <div className="mt-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">Quick Reference</h2>
           <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-            {[['Admin', 'Full access — manage users, configure institutional providers, all classrooms'],
+            {[
+              ['Admin', 'Full access — manage users, configure institutional providers, all classrooms'],
               ['Instructor', 'Create classrooms, bring own AI keys, enroll students, manage own content'],
-              ['Student', 'Attend classrooms, use institutional AI providers (no own keys by default)']].map(([role, desc]) => (
+              ['Student', 'Attend classrooms, use institutional AI providers (no own keys by default)'],
+            ].map(([role, desc]) => (
               <div key={role} className="flex gap-3">
                 <span className="font-medium w-20 text-gray-800 dark:text-gray-200">{role}</span>
                 <span>{desc}</span>

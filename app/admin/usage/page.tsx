@@ -28,9 +28,15 @@ export default function UsageDashboardPage() {
       const params = new URLSearchParams();
       if (startDate) params.set('startDate', startDate);
       if (endDate) params.set('endDate', endDate);
-      const endpoint = viewMode === 'aggregates' ? (params.set('aggregate', 'true'), params.set('groupBy', groupBy), `/api/admin/usage?${params}`) : `/api/admin/usage?${params}`;
+      const endpoint = viewMode === 'aggregates'
+        ? (params.set('aggregate', 'true'), params.set('groupBy', groupBy), `/api/admin/usage?${params}`)
+        : `/api/admin/usage?${params}`;
       const res = await fetch(endpoint);
-      if (!res.ok) { if (res.status === 401 || res.status === 403) { router.push('/login'); return; } throw new Error('Failed to fetch'); }
+      if (!res.ok) {
+        if (res.status === 401) { router.push('/login?callbackUrl=/admin/usage'); return; }
+        if (res.status === 403) { router.push('/dashboard'); return; }
+        throw new Error('Failed to fetch');
+      }
       const data = await res.json();
       if (viewMode === 'aggregates') setAggregates(data.aggregates || []); else setLogs(data.logs || []);
     } catch (err) { setError(err instanceof Error ? err.message : 'Unknown error'); }

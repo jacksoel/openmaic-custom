@@ -49,8 +49,9 @@ export default function SettingsPage() {
         const { data } = await authClient.getSession();
         if (!data?.user) { router.push('/login?callbackUrl=/settings'); return; }
         const u = data.user as any;
+        // Students don't have personal provider keys — send them to dashboard
+        if (u.role === 'student') { router.push('/dashboard'); return; }
         setUser({ id: u.id, email: u.email, name: u.name, role: u.role || 'student' });
-        if (u.role === 'student') { router.push('/'); return; }
       } catch { router.push('/login?callbackUrl=/settings'); }
     }
     checkAuth();
@@ -128,7 +129,7 @@ export default function SettingsPage() {
       <div className="border-b bg-muted/30">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push('/')} className="text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-5 w-5" /></button>
+            <button onClick={() => router.push('/dashboard')} className="text-muted-foreground hover:text-foreground transition-colors"><ArrowLeft className="h-5 w-5" /></button>
             <div>
               <h1 className="text-xl font-semibold">My AI Stack</h1>
               <p className="text-sm text-muted-foreground">Configure your own AI provider keys and default models</p>

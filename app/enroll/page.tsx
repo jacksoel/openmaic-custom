@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { AuthGuard } from "@/components/auth/auth-guard";
@@ -27,12 +27,6 @@ function EnrollForm() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!enrolled) return;
-    const t = window.setTimeout(() => router.push("/dashboard"), 2000);
-    return () => window.clearTimeout(t);
-  }, [enrolled, router]);
 
   const resetMessages = () => { setError(null); setToastMessage(null); };
 
@@ -76,6 +70,7 @@ function EnrollForm() {
           <h1 className="text-2xl font-bold tracking-tight dark:text-gray-100">Join a Classroom</h1>
           <p className="mt-2 text-sm text-muted-foreground">Enter the classroom code provided by your instructor, preview the class, then enroll.</p>
           <div className="mt-6 rounded-lg border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4 text-sm text-blue-800 dark:text-blue-300">Students can join open enrollment classrooms here.</div>
+          <button onClick={() => router.push('/dashboard')} className="mt-6 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">← Back to Dashboard</button>
         </section>
         <section className="relative w-full space-y-6 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm sm:p-8">
           {toastMessage && (
@@ -90,13 +85,23 @@ function EnrollForm() {
             </div>
           )}
           {enrolled ? (
-            <div className="space-y-4 text-center">
-              <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-5">
-                <p className="font-medium text-green-700 dark:text-green-300">Enrolled in {preview?.name || 'classroom'}! Redirecting...</p>
+            <div className="space-y-4">
+              <div className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-5 text-center">
+                <p className="font-medium text-green-700 dark:text-green-300">✓ Enrolled in {preview?.name || 'classroom'}!</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <button onClick={() => router.push("/dashboard")} className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">Go to Dashboard</button>
-                <button onClick={() => router.push(`/classroom/${enrolledClassId}`)} className="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Open Classroom</button>
+                <button
+                  onClick={() => router.push(`/classroom/${enrolledClassId}`)}
+                  className="rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                >
+                  Open Classroom
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200"
+                >
+                  Back to Dashboard
+                </button>
               </div>
             </div>
           ) : !preview ? (
