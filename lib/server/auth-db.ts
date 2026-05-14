@@ -137,7 +137,7 @@ export function initAuthDb(): void {
       model TEXT NOT NULL,
       inputTokens INTEGER DEFAULT 0,
       outputTokens INTEGER DEFAULT 0,
-      createdAt TEXT DEFAULT (datetime('now')
+      createdAt TEXT DEFAULT (datetime('now'))
     );
   `);
 
