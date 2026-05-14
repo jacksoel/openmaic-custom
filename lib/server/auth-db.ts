@@ -9,6 +9,7 @@
  */
 
 import Database from 'better-sqlite3';
+import { mkdirSync } from 'fs';
 import path from 'path';
 
 const DB_PATH = process.env.AUTH_DB_PATH || '/app/data/auth/auth.db';
@@ -17,6 +18,8 @@ let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!_db) {
+    // Ensure the parent directory exists — better-sqlite3 won't create it.
+    mkdirSync(path.dirname(DB_PATH), { recursive: true });
     _db = new Database(DB_PATH);
     _db.pragma('journal_mode = WAL');
     _db.pragma('foreign_keys = ON');
@@ -134,7 +137,7 @@ export function initAuthDb(): void {
       model TEXT NOT NULL,
       inputTokens INTEGER DEFAULT 0,
       outputTokens INTEGER DEFAULT 0,
-      createdAt TEXT DEFAULT (datetime('now'))
+      createdAt TEXT DEFAULT (datetime('now')
     );
   `);
 

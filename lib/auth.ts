@@ -49,11 +49,19 @@ export async function getAuth() {
           minPasswordLength: 8,
           sendResetPassword: async ({ user, url }: { user: { email: string; name?: string }; url: string }) => {
             console.log('[Auth] Password reset requested for:', user.email);
+            const hasResend = !!process.env.RESEND_API_KEY;
+            if (!hasResend) {
+              // No email provider configured — log the link so it isn't silently lost.
+              console.warn('[Auth] RESEND_API_KEY not set. Reset URL (expires in 1h):');
+              console.warn('[Auth] Reset link:', url);
+              return;
+            }
             try {
               const { sendPasswordResetEmail } = await import('@/lib/email/resend');
               await sendPasswordResetEmail(user.email, url, user.name || undefined);
             } catch (err) {
               console.error('[Auth] Failed to send reset email:', err);
+              console.warn('[Auth] Reset URL (expires in 1h):', url);
             }
           },
         },
