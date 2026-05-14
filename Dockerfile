@@ -19,6 +19,10 @@ RUN pnpm install --frozen-lockfile
 
 # ---- Stage 3: Builder ----
 FROM base AS builder
+ARG NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ARG BETTER_AUTH_URL
+ENV BETTER_AUTH_URL=${BETTER_AUTH_URL}
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/packages ./packages

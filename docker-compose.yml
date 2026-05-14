@@ -1,6 +1,10 @@
 services:
   openmaic:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_URL: https://maic.coachingthegist.com
+        BETTER_AUTH_URL: https://maic.coachingthegist.com
     env_file:
       - .env.local
     ports:
