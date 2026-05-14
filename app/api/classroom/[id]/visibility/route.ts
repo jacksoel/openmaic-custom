@@ -8,6 +8,7 @@ import {
   type ClassroomVisibility,
 } from '@/lib/server/classroom-storage';
 import { getSessionUser } from '@/lib/auth';
+import { appendAuditLog } from '@/lib/server/audit-log';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('Classroom Visibility API');
@@ -24,6 +25,8 @@ const VALID_VISIBILITIES: ClassroomVisibility[] = ['public', 'enrolled', 'privat
  *   Instructor (reviewer) — approve (pending→public) or reject (pending→enrolled)
  *   Student (owner)     — private / enrolled / pending only;
  *                         cannot change once the classroom is public
+ *
+ * Accepts optional `reason` field — recorded in the audit log.
  */
 export async function PATCH(
   request: NextRequest,
@@ -42,7 +45,7 @@ export async function PATCH(
     return apiError(API_ERROR_CODES.UNAUTHORIZED, 401, 'Authentication required');
   }
 
-  let body: { visibility?: unknown };
+  let body: { visibility?: unknown; reason?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -63,12 +66,28 @@ export async function PATCH(
     return apiError(API_ERROR_CODES.INVALID_REQUEST, 404, 'Classroom not found');
   }
 
+  const oldVisibility = classroom.visibility ?? 'enrolled';
+
   const check = canChangeVisibility(classroom, user?.id, user?.role, newVisibility);
   if (!check.allowed) {
     return apiError(API_ERROR_CODES.INVALID_REQUEST, 403, check.reason || 'Permission denied');
   }
 
   const updated = await updateClassroomVisibility(classroomId, newVisibility);
+
+  if (user && newVisibility !== oldVisibility) {
+    const u = user as { id: string; name?: string | null; email: string; role?: string | null };
+    appendAuditLog({
+      classroomId,
+      changedBy: u.id,
+      changedByName: u.name || u.email || null,
+      action: 'visibility_change',
+      field: 'visibility',
+      oldValue: oldVisibility,
+      newValue: newVisibility,
+      reason: typeof body.reason === 'string' ? body.reason.trim() || null : null,
+    });
+  }
 
   log.info(`Classroom ${classroomId} visibility → ${newVisibility} (by user ${user?.id}, role ${user?.role})`);
 

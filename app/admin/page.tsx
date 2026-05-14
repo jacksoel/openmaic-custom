@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Key, BarChart3, Shield, Users } from 'lucide-react';
+import { Key, BarChart3, Shield, Users, BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme-toggle';
 
@@ -65,6 +65,7 @@ export default function AdminPage() {
             <button onClick={() => router.push('/admin/usage')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><BarChart3 className="w-3.5 h-3.5" />Usage Dashboard</button>
             <button onClick={() => router.push('/admin/bulk-provision')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><Users className="w-3.5 h-3.5" />Bulk Provision</button>
             <button onClick={() => router.push('/admin/policy')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><Shield className="w-3.5 h-3.5" />Policy</button>
+            <button onClick={() => router.push('/admin/classrooms')} className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"><BookOpen className="w-3.5 h-3.5" />Classrooms</button>
             <button onClick={() => router.push('/dashboard')} className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">← Dashboard</button>
             <ThemeToggle />
           </div>
@@ -112,7 +113,7 @@ export default function AdminPage() {
           <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2">Quick Reference</h2>
           <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
             {[
-              ['Admin', 'Full access — manage users, configure institutional providers, all classrooms'],
+              ['Admin', 'Full access — manage users, govern all classrooms, configure institutional providers'],
               ['Instructor', 'Create classrooms, bring own AI keys, enroll students, manage own content'],
               ['Student', 'Attend classrooms, use institutional AI providers (no own keys by default)'],
             ].map(([role, desc]) => (

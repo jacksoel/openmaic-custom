@@ -2,7 +2,8 @@
  * Auth Database — Server-only SQLite module
  *
  * Handles database initialization and direct queries for
- * better-auth tables and extension tables (user_providers, usage_logs).
+ * better-auth tables and extension tables (user_providers, usage_logs,
+ * classroom_audit_log).
  *
  * This module uses better-sqlite3 (Node.js native) and
  * must only be imported from server-side code.
@@ -102,7 +103,7 @@ export function initBetterAuthTables(): void {
 }
 
 /**
- * Initialize extension tables (user_providers, usage_logs).
+ * Initialize extension tables (user_providers, usage_logs, classroom_audit_log).
  * Called once at server startup.
  */
 export function initAuthDb(): void {
@@ -150,6 +151,24 @@ export function initAuthDb(): void {
     CREATE INDEX IF NOT EXISTS idx_usage_logs_createdAt
     ON usage_logs(createdAt);
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS classroom_audit_log (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      classroom_id    TEXT    NOT NULL,
+      changed_by      TEXT    NOT NULL,
+      changed_by_name TEXT,
+      changed_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+      action          TEXT    NOT NULL,
+      field           TEXT,
+      old_value       TEXT,
+      new_value       TEXT,
+      reason          TEXT
+    );
+  `);
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_classroom ON classroom_audit_log(classroom_id);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_changed_at ON classroom_audit_log(changed_at);`);
 
   console.log('[Auth] Extension database initialized at', DB_PATH);
 }
