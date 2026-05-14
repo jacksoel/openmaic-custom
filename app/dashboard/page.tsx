@@ -14,6 +14,44 @@ interface EnrolledClassroom {
   visibility: string;
   createdAt: string;
   isOwner: boolean;
+  pendingSince: string | null;
+}
+
+function visibilityBadgeClass(v: string): string {
+  switch (v) {
+    case "public":   return "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400";
+    case "pending":  return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400";
+    case "enrolled": return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400";
+    default:         return "bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400";
+  }
+}
+
+function visibilityLabel(v: string): string {
+  switch (v) {
+    case "public":   return "Public";
+    case "pending":  return "⏳ Pending review";
+    case "enrolled": return "Enrolled only";
+    case "private":  return "Private";
+    default:         return v;
+  }
+}
+
+function getVisibilityOptions(role: string | undefined, currentVisibility: string) {
+  if (role === "admin" || role === "instructor") {
+    return [
+      { value: "private",  label: "Private" },
+      { value: "enrolled", label: "Enrolled only" },
+      { value: "pending",  label: "Pending review" },
+      { value: "public",   label: "Public" },
+    ];
+  }
+  // Student — cannot set public; locked if already public
+  if (currentVisibility === "public") return [];
+  return [
+    { value: "private",  label: "Private" },
+    { value: "enrolled", label: "Enrolled only" },
+    { value: "pending",  label: "Submit for review" },
+  ];
 }
 
 function DashboardSkeleton() {
@@ -25,7 +63,7 @@ function DashboardSkeleton() {
           <div className="h-4 w-80 max-w-full animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((item) => (
+          {[0, 1, 2].map(item => (
             <div key={item} className="rounded-xl border dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
               <div className="mb-4 h-5 w-3/4 animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
               <div className="h-4 w-1/2 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
@@ -50,6 +88,7 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newEnrollmentCount, setNewEnrollmentCount] = useState(0);
+  const [updatingVisibility, setUpdatingVisibility] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadClassrooms() {
@@ -57,7 +96,7 @@ function DashboardContent() {
         const res = await fetch("/api/user/enrollments");
         if (res.ok) {
           const data = await res.json();
-          const fetched = data.classrooms || [];
+          const fetched: EnrolledClassroom[] = data.classrooms || [];
           setClassrooms(fetched);
           const current = fetched.length;
           const lastSeen = parseInt(localStorage.getItem("lastSeenEnrollmentCount") || "0", 10);
@@ -76,15 +115,41 @@ function DashboardContent() {
   }, []);
 
   const handleSignOut = async () => {
-    try {
-      await signOut();
-    } catch {
+    try { await signOut(); } catch {
       document.cookie = "better-auth.session_token=; Max-Age=0; path=/";
       document.cookie = "__Secure-better-auth.session_token=; Max-Age=0; path=/; Secure";
       document.cookie = "better-auth.session_data=; Max-Age=0; path=/";
       document.cookie = "__Secure-better-auth.session_data=; Max-Age=0; path=/; Secure";
     }
     router.push("/login");
+  };
+
+  const handleVisibilityChange = async (classroomId: string, newVisibility: string) => {
+    setUpdatingVisibility(classroomId);
+    setError(null);
+    try {
+      const res = await fetch(`/api/classroom/${classroomId}/visibility`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visibility: newVisibility }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || "Failed to update visibility.");
+        return;
+      }
+      setClassrooms(prev =>
+        prev.map(c =>
+          c.id === classroomId
+            ? { ...c, visibility: newVisibility, pendingSince: newVisibility === "pending" ? new Date().toISOString() : null }
+            : c
+        )
+      );
+    } catch {
+      setError("Unable to update visibility. Please try again.");
+    } finally {
+      setUpdatingVisibility(null);
+    }
   };
 
   if (loading) return <DashboardSkeleton />;
@@ -106,14 +171,12 @@ function DashboardContent() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {isInstructorOrAdmin && (
-              <button
-                onClick={() => router.push("/")}
-                className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                Create Classroom
-              </button>
-            )}
+            <button
+              onClick={() => router.push("/")}
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Create Classroom
+            </button>
             {user?.role === "admin" && (
               <button
                 onClick={() => router.push("/admin")}
@@ -153,7 +216,10 @@ function DashboardContent() {
         )}
 
         {error && (
-          <div className="mb-6 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400">{error}</div>
+          <div className="mb-6 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-4 text-sm text-red-700 dark:text-red-400 flex items-center justify-between">
+            <span>{error}</span>
+            <button onClick={() => setError(null)} className="ml-4 text-red-400 hover:text-red-600">×</button>
+          </div>
         )}
 
         {classrooms.length === 0 && !error && isInstructorOrAdmin && (
@@ -180,7 +246,7 @@ function DashboardContent() {
             </svg>
             <h2 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">No classrooms yet</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
-              Ask your instructor for a classroom code, then join your first OpenMAIC classroom.
+              Ask your instructor for a classroom code, or browse open classrooms to get started.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
@@ -200,33 +266,67 @@ function DashboardContent() {
         )}
 
         {classrooms.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {classrooms.map((classroom) => (
-              <button
-                key={classroom.id}
-                onClick={() => router.push(`/classroom/${classroom.id}`)}
-                className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 text-left shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 transition-colors group-hover:text-primary">{classroom.name}</h3>
-                  {classroom.isOwner && (
-                    <span className="shrink-0 rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">Owner</span>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {classrooms.map(classroom => {
+              const options = classroom.isOwner ? getVisibilityOptions(user?.role, classroom.visibility) : [];
+              const isLocked = classroom.isOwner && classroom.visibility === "public" && user?.role === "student";
+              return (
+                <div key={classroom.id} className="flex flex-col gap-1.5">
+                  {/* Main card */}
+                  <button
+                    onClick={() => router.push(`/classroom/${classroom.id}`)}
+                    className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 text-left shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 transition-colors group-hover:text-primary leading-snug">
+                        {classroom.name}
+                      </h3>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {classroom.isOwner && (
+                          <span className="rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">
+                            Owner
+                          </span>
+                        )}
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${visibilityBadgeClass(classroom.visibility)}`}>
+                          {visibilityLabel(classroom.visibility)}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">{classroom.instructor}</p>
+                    <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                      {new Date(classroom.createdAt).toLocaleDateString()}
+                    </p>
+                  </button>
+
+                  {/* Visibility control — only for owners with available options */}
+                  {classroom.isOwner && options.length > 0 && (
+                    <div className="flex items-center gap-2 rounded-lg border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs">
+                      <span className="text-gray-400 dark:text-gray-500 shrink-0">Visibility</span>
+                      <select
+                        value={classroom.visibility}
+                        onChange={e => handleVisibilityChange(classroom.id, e.target.value)}
+                        disabled={updatingVisibility === classroom.id}
+                        className="flex-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer disabled:opacity-50"
+                      >
+                        {options.map(opt => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      {updatingVisibility === classroom.id && (
+                        <span className="text-gray-400 shrink-0">Saving…</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Locked state — student's approved public classroom */}
+                  {isLocked && (
+                    <p className="px-1 text-xs text-muted-foreground">
+                      Visibility managed by instructor or admin.
+                    </p>
                   )}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">{classroom.instructor}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-                  <span>{new Date(classroom.createdAt).toLocaleDateString()}</span>
-                  <span className="text-gray-300 dark:text-gray-600">-</span>
-                  <span className="capitalize">{classroom.visibility}</span>
-                  {user?.role && (
-                    <>
-                      <span className="text-gray-300 dark:text-gray-600">-</span>
-                      <span className="capitalize">{classroom.isOwner ? "instructor" : user.role}</span>
-                    </>
-                  )}
-                </div>
-              </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

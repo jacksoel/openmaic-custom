@@ -9,31 +9,32 @@ import {
   canViewClassroom,
   canEditClassroom,
   listClassroomsForUser,
+  type ClassroomVisibility,
 } from '@/lib/server/classroom-storage';
 import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
 import { createLogger } from '@/lib/logger';
 
 const log = createLogger('Classroom API');
 
+const VALID_VISIBILITIES: ClassroomVisibility[] = ['public', 'enrolled', 'private', 'pending'];
+
 /**
- * POST /api/classroom — Create a new classroom
- * Requires auth + instructor/admin role.
- * Sets ownerId from session.
+ * POST /api/classroom — Create or overwrite a classroom.
+ *
+ * Auth rules:
+ *   - Any authenticated user may create a classroom.
+ *   - Students may not set visibility to 'public' directly (use 'pending' to request review).
+ *   - Only the original owner or an admin may overwrite an existing classroom.
  */
 export async function POST(request: NextRequest) {
   let stageId: string | undefined;
   let sceneCount: number | undefined;
 
-  // Auth check
   const user = await getSessionUser(request);
   const authEnabled = process.env.AUTH_ENABLED === 'true';
 
   if (authEnabled && !user) {
     return apiError(API_ERROR_CODES.UNAUTHORIZED, 401, 'Authentication required');
-  }
-
-  if (authEnabled && !isInstructorOrAbove(user)) {
-    return apiError(API_ERROR_CODES.INVALID_REQUEST, 403, 'Only instructors and admins can create classrooms');
   }
 
   try {
@@ -43,31 +44,35 @@ export async function POST(request: NextRequest) {
     sceneCount = scenes?.length;
 
     if (!stage || !scenes) {
-      return apiError(
-        API_ERROR_CODES.MISSING_REQUIRED_FIELD,
-        400,
-        'Missing required fields: stage, scenes',
-      );
+      return apiError(API_ERROR_CODES.MISSING_REQUIRED_FIELD, 400, 'Missing required fields: stage, scenes');
     }
 
-    const id = stage.id || randomUUID();
+    // Validate requested visibility
+    const requestedVisibility: ClassroomVisibility =
+      VALID_VISIBILITIES.includes(body.visibility) ? body.visibility : 'enrolled';
 
-    // Ownership guard: if a classroom with this ID already exists, only its owner
-    // (or an admin) may overwrite it. Without this check any instructor can POST
-    // with an existing ID and silently hijack another user's classroom.
-    if (authEnabled) {
-      const existingClassroom = await readClassroom(id);
-      if (existingClassroom && !canEditClassroom(existingClassroom, user?.id, user?.role)) {
+    if (authEnabled && user) {
+      const isStudent = !isInstructorOrAbove(user);
+      if (isStudent && requestedVisibility === 'public') {
         return apiError(
           API_ERROR_CODES.INVALID_REQUEST,
           403,
-          'You do not have permission to modify this classroom',
+          'Students cannot publish classrooms directly. Set visibility to "pending" to submit for instructor review.',
         );
       }
     }
 
-    const baseUrl = buildRequestOrigin(request);
+    const id = stage.id || randomUUID();
 
+    // Ownership guard: only the original owner or an admin may overwrite.
+    if (authEnabled) {
+      const existing = await readClassroom(id);
+      if (existing && !canEditClassroom(existing, user?.id, user?.role)) {
+        return apiError(API_ERROR_CODES.INVALID_REQUEST, 403, 'You do not have permission to modify this classroom');
+      }
+    }
+
+    const baseUrl = buildRequestOrigin(request);
     const persisted = await persistClassroom(
       {
         id,
@@ -76,7 +81,7 @@ export async function POST(request: NextRequest) {
         ownerId: user?.id || undefined,
         ownerRole: user?.role || undefined,
         ownerName: user?.name || undefined,
-        visibility: body.visibility || 'enrolled',
+        visibility: requestedVisibility,
         enrolledUserIds: body.enrolledUserIds || [],
         classroomProviderConfig: body.classroomProviderConfig || undefined,
       },
@@ -85,10 +90,7 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess({ id: persisted.id, url: persisted.url }, 201);
   } catch (error) {
-    log.error(
-      `Classroom storage failed [stageId=${stageId ?? 'unknown'}, scenes=${sceneCount ?? 0}]:`,
-      error,
-    );
+    log.error(`Classroom storage failed [stageId=${stageId ?? 'unknown'}, scenes=${sceneCount ?? 0}]:`, error);
     return apiError(
       API_ERROR_CODES.INTERNAL_ERROR,
       500,
@@ -99,35 +101,25 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * GET /api/classroom — Read a single classroom by ?id=, or list all with ?list=true
- * Enforces visibility: owner/admin see all, others see based on visibility + enrollment.
+ * GET /api/classroom — Read a single classroom (?id=) or list all (?list=true).
  */
 export async function GET(request: NextRequest) {
   const authEnabled = process.env.AUTH_ENABLED === 'true';
   const user = await getSessionUser(request);
 
   try {
-    // List mode: GET /api/classroom?list=true
     if (request.nextUrl.searchParams.get('list') === 'true') {
       if (authEnabled && !user) {
         return apiError(API_ERROR_CODES.UNAUTHORIZED, 401, 'Authentication required');
       }
-
       const classrooms = await listClassroomsForUser(user?.id, user?.role);
       return apiSuccess({ classrooms });
     }
 
-    // Single classroom mode: GET /api/classroom?id=xxx
     const id = request.nextUrl.searchParams.get('id');
-
     if (!id) {
-      return apiError(
-        API_ERROR_CODES.MISSING_REQUIRED_FIELD,
-        400,
-        'Missing required parameter: id (or use ?list=true)',
-      );
+      return apiError(API_ERROR_CODES.MISSING_REQUIRED_FIELD, 400, 'Missing required parameter: id (or use ?list=true)');
     }
-
     if (!isValidClassroomId(id)) {
       return apiError(API_ERROR_CODES.INVALID_REQUEST, 400, 'Invalid classroom id');
     }
@@ -136,20 +128,13 @@ export async function GET(request: NextRequest) {
     if (!classroom) {
       return apiError(API_ERROR_CODES.INVALID_REQUEST, 404, 'Classroom not found');
     }
-
-    // Enforce visibility
-    if (authEnabled) {
-      if (!canViewClassroom(classroom, user?.id, user?.role)) {
-        return apiError(API_ERROR_CODES.INVALID_REQUEST, 403, 'You do not have access to this classroom');
-      }
+    if (authEnabled && !canViewClassroom(classroom, user?.id, user?.role)) {
+      return apiError(API_ERROR_CODES.INVALID_REQUEST, 403, 'You do not have access to this classroom');
     }
 
     return apiSuccess({ classroom });
   } catch (error) {
-    log.error(
-      `Classroom retrieval failed [id=${request.nextUrl.searchParams.get('id') ?? 'unknown'}]:`,
-      error,
-    );
+    log.error(`Classroom retrieval failed [id=${request.nextUrl.searchParams.get('id') ?? 'unknown'}]:`, error);
     return apiError(
       API_ERROR_CODES.INTERNAL_ERROR,
       500,

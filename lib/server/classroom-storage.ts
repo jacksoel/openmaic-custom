@@ -21,7 +21,6 @@ export async function ensureClassroomJobsDir() {
 export async function writeJsonFileAtomic(filePath: string, data: unknown) {
   const dir = path.dirname(filePath);
   await ensureDir(dir);
-
   const tempFilePath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   const content = JSON.stringify(data, null, 2);
   await fs.writeFile(tempFilePath, content, 'utf-8');
@@ -35,30 +34,30 @@ export function buildRequestOrigin(req: NextRequest): string {
 }
 
 // ---------------------------------------------------------------------------
-// Classroom data types (extended with ownership)
+// Types
 // ---------------------------------------------------------------------------
 
-export type ClassroomVisibility = 'public' | 'enrolled' | 'private';
+/**
+ * Visibility states:
+ *   private  — owner + admin only
+ *   enrolled — enrolled users + owner + admin (invite/code required, not in catalog)
+ *   pending  — submitted for instructor/admin review; not yet in public catalog
+ *   public   — discoverable in catalog; any authenticated user may self-enroll
+ */
+export type ClassroomVisibility = 'public' | 'enrolled' | 'private' | 'pending';
 
 export interface PersistedClassroomData {
   id: string;
   stage: Stage;
   scenes: Scene[];
   createdAt: string;
-  /** Owner user ID (instructor who created this classroom) */
   ownerId?: string;
-  /** Owner role at time of creation */
   ownerRole?: string;
-  /** Who can see this classroom */
   visibility?: ClassroomVisibility;
-  /** User IDs of enrolled students */
   enrolledUserIds?: string[];
-  /** Display name of owner (for UI) */
   ownerName?: string;
-  /** Per-classroom provider/model override. Set by instructor at classroom creation or edit time.
-   * When set, resolveProvider uses this slug and model instead of the user default.
-   * Key resolution still follows: classroom owner user key -> institutional -> error.
-   */
+  /** ISO timestamp set when visibility transitions to 'pending'; cleared on any other transition. */
+  pendingSince?: string;
   classroomProviderConfig?: {
     providerSlug: string;
     defaultModel?: string;
@@ -69,15 +68,30 @@ export function isValidClassroomId(id: string): boolean {
   return /^[a-zA-Z0-9_-]+$/.test(id);
 }
 
+// ---------------------------------------------------------------------------
+// Effective visibility helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the effective visibility for a classroom.
+ * Legacy classrooms (no visibility field) default to 'enrolled' — not 'public'.
+ * This prevents pre-auth JSON files from being inadvertently exposed in the catalog.
+ */
+function effectiveVisibility(classroom: PersistedClassroomData): ClassroomVisibility {
+  return classroom.visibility ?? 'enrolled';
+}
+
+// ---------------------------------------------------------------------------
+// CRUD
+// ---------------------------------------------------------------------------
+
 export async function readClassroom(id: string): Promise<PersistedClassroomData | null> {
   const filePath = path.join(CLASSROOMS_DIR, `${id}.json`);
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(content) as PersistedClassroomData;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return null;
-    }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
     throw error;
   }
 }
@@ -92,13 +106,11 @@ export async function persistClassroom(
     ownerName?: string;
     visibility?: ClassroomVisibility;
     enrolledUserIds?: string[];
-    classroomProviderConfig?: {
-      providerSlug: string;
-      defaultModel?: string;
-    };
+    classroomProviderConfig?: { providerSlug: string; defaultModel?: string };
   },
   baseUrl: string,
 ): Promise<PersistedClassroomData & { url: string }> {
+  const visibility = data.visibility || 'enrolled';
   const classroomData: PersistedClassroomData = {
     id: data.id,
     stage: data.stage,
@@ -107,63 +119,52 @@ export async function persistClassroom(
     ownerId: data.ownerId,
     ownerRole: data.ownerRole,
     ownerName: data.ownerName,
-    visibility: data.visibility || 'enrolled',
+    visibility,
     enrolledUserIds: data.enrolledUserIds || [],
     classroomProviderConfig: data.classroomProviderConfig,
+    pendingSince: visibility === 'pending' ? new Date().toISOString() : undefined,
   };
-
   await ensureClassroomsDir();
   const filePath = path.join(CLASSROOMS_DIR, `${data.id}.json`);
   await writeJsonFileAtomic(filePath, classroomData);
-
-  return {
-    ...classroomData,
-    url: `${baseUrl}/classroom/${data.id}`,
-  };
+  return { ...classroomData, url: `${baseUrl}/classroom/${data.id}` };
 }
 
 // ---------------------------------------------------------------------------
-// Access control helpers
+// Access control
 // ---------------------------------------------------------------------------
 
 /**
- * Check if a user can view a classroom.
- * - Admins can view everything
- * - Owner can always view
- * - Public classrooms: any authenticated user
- * - Enrolled: user is in enrolledUserIds
- * - Private: only owner and admin
+ * Check if a user can VIEW a classroom.
+ *
+ * - Admin: sees all
+ * - Owner: sees own
+ * - public: any authenticated user
+ * - enrolled: only enrolled users
+ * - pending: instructors and admins (for review queue)
+ * - private: owner + admin only
  */
 export function canViewClassroom(
   classroom: PersistedClassroomData,
   userId: string | null | undefined,
   userRole: string | null | undefined,
 ): boolean {
-  // Admin sees everything
   if (userRole === 'admin') return true;
-
-  // Owner always sees their own
   if (userId && classroom.ownerId === userId) return true;
 
-  // Legacy classrooms (created before multi-tenant) have no visibility field.
-  // Default them to 'public' so existing classrooms remain accessible to all authenticated users.
-  const visibility = classroom.visibility ?? 'public';
-
-  if (visibility === 'public') {
-    return !!userId; // any authenticated user
+  const visibility = effectiveVisibility(classroom);
+  switch (visibility) {
+    case 'public':   return !!userId;
+    case 'enrolled': return !!userId && !!(classroom.enrolledUserIds || []).includes(userId);
+    case 'pending':  return userRole === 'instructor'; // instructors see pending queue
+    case 'private':  return false; // owner/admin handled above
+    default:         return false;
   }
-
-  if (visibility === 'enrolled') {
-    return !!userId && !!(classroom.enrolledUserIds || []).includes(userId);
-  }
-
-  // private: only owner/admin (already checked above)
-  return false;
 }
 
 /**
- * Check if a user can edit a classroom.
- * Only owner or admin can edit.
+ * Check if a user can EDIT a classroom's content.
+ * Only the owner or an admin may modify content.
  */
 export function canEditClassroom(
   classroom: PersistedClassroomData,
@@ -171,56 +172,110 @@ export function canEditClassroom(
   userRole: string | null | undefined,
 ): boolean {
   if (userRole === 'admin') return true;
-  if (userId && classroom.ownerId === userId) return true;
-  return false;
+  return !!(userId && classroom.ownerId === userId);
 }
 
 /**
- * Enroll a user in a classroom (adds to enrolledUserIds).
+ * Check if a user can CHANGE a classroom's visibility.
+ *
+ * Asymmetric governance model:
+ *   Admin               — unrestricted on any classroom
+ *   Instructor (owner)  — full authority on own classrooms, no approval step
+ *   Instructor (reviewer, non-owner of a pending classroom)
+ *                       — may approve (→ public) or reject (→ enrolled)
+ *   Student (owner)     — may set private / enrolled / pending
+ *                         may NOT set public directly
+ *                         may NOT change visibility once the classroom is public
+ *                         (only an instructor/admin can demote a published classroom)
  */
-export async function enrollUserInClassroom(
+export function canChangeVisibility(
+  classroom: PersistedClassroomData,
+  userId: string | null | undefined,
+  userRole: string | null | undefined,
+  newVisibility: ClassroomVisibility,
+): { allowed: boolean; reason?: string } {
+  if (userRole === 'admin') return { allowed: true };
+
+  const isOwner = !!(userId && classroom.ownerId === userId);
+  const isInstructor = userRole === 'instructor';
+  const current = effectiveVisibility(classroom);
+
+  // Instructor reviewer (non-owner) acting on a pending classroom
+  if (isInstructor && !isOwner && current === 'pending') {
+    if (newVisibility === 'public' || newVisibility === 'enrolled') return { allowed: true };
+    return { allowed: false, reason: 'Reviewers may only approve (→ public) or reject (→ enrolled) pending classrooms' };
+  }
+
+  if (!isOwner) {
+    return { allowed: false, reason: 'Only the classroom owner or an admin can change visibility' };
+  }
+
+  // Instructor owner — full authority, frictionless toggle
+  if (isInstructor) return { allowed: true };
+
+  // Student owner
+  if (current === 'public') {
+    return { allowed: false, reason: 'Once published, only an instructor or admin can adjust visibility' };
+  }
+  if (newVisibility === 'public') {
+    return { allowed: false, reason: 'Students cannot publish directly. Set to "pending" to submit for instructor review.' };
+  }
+  return { allowed: true };
+}
+
+/**
+ * Update a classroom's visibility field in place.
+ * Sets pendingSince when transitioning to 'pending'; clears it on all other transitions.
+ */
+export async function updateClassroomVisibility(
   classroomId: string,
-  userId: string,
-): Promise<boolean> {
+  newVisibility: ClassroomVisibility,
+): Promise<PersistedClassroomData | null> {
+  const classroom = await readClassroom(classroomId);
+  if (!classroom) return null;
+  const updated: PersistedClassroomData = {
+    ...classroom,
+    visibility: newVisibility,
+    pendingSince: newVisibility === 'pending'
+      ? (classroom.pendingSince ?? new Date().toISOString())
+      : undefined,
+  };
+  await writeJsonFileAtomic(path.join(CLASSROOMS_DIR, `${classroomId}.json`), updated);
+  return updated;
+}
+
+// ---------------------------------------------------------------------------
+// Enrollment
+// ---------------------------------------------------------------------------
+
+export async function enrollUserInClassroom(classroomId: string, userId: string): Promise<boolean> {
   const classroom = await readClassroom(classroomId);
   if (!classroom) return false;
-
   const enrolled = classroom.enrolledUserIds || [];
-  if (enrolled.includes(userId)) return true; // already enrolled
-
+  if (enrolled.includes(userId)) return true;
   enrolled.push(userId);
   classroom.enrolledUserIds = enrolled;
-
-  const filePath = path.join(CLASSROOMS_DIR, `${classroomId}.json`);
-  await writeJsonFileAtomic(filePath, classroom);
+  await writeJsonFileAtomic(path.join(CLASSROOMS_DIR, `${classroomId}.json`), classroom);
   return true;
 }
 
-/**
- * List classrooms accessible by a user.
- */
+// ---------------------------------------------------------------------------
+// List
+// ---------------------------------------------------------------------------
+
 export async function listClassroomsForUser(
   userId: string | null | undefined,
   userRole: string | null | undefined,
 ): Promise<PersistedClassroomData[]> {
   await ensureClassroomsDir();
   const files = await fs.readdir(CLASSROOMS_DIR);
-  const jsonFiles = files.filter(f => f.endsWith('.json'));
-
   const classrooms: PersistedClassroomData[] = [];
-  for (const file of jsonFiles) {
+  for (const file of files.filter(f => f.endsWith('.json'))) {
     try {
       const content = await fs.readFile(path.join(CLASSROOMS_DIR, file), 'utf-8');
       const classroom = JSON.parse(content) as PersistedClassroomData;
-      if (canViewClassroom(classroom, userId, userRole)) {
-        classrooms.push(classroom);
-      }
-    } catch {
-      // Skip corrupted files
-    }
+      if (canViewClassroom(classroom, userId, userRole)) classrooms.push(classroom);
+    } catch { /* skip corrupted files */ }
   }
-
-  return classrooms.sort((a, b) =>
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  return classrooms.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
