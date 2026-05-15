@@ -10,13 +10,10 @@ const log = createLogger('Classroom Catalog API');
  * GET /api/classroom/catalog
  *
  * Returns two lists:
- *   classrooms        — public classrooms available for enrollment
- *   pendingClassrooms — student-submitted classrooms awaiting review
- *                       (returned only to admin and instructor roles)
+ *   classrooms        — public, non-archived classrooms available for enrollment
+ *   pendingClassrooms — student-submitted classrooms awaiting review (instructor/admin only)
  *
- * Visibility rules in the catalog:
- *   Students           — see only public classrooms
- *   Instructors/Admins — see public classrooms + pending review queue
+ * Archived classrooms are excluded from both lists.
  */
 export async function GET(req: NextRequest) {
   const authEnabled = process.env.AUTH_ENABLED !== 'false';
@@ -31,22 +28,24 @@ export async function GET(req: NextRequest) {
     const userId = user?.id;
     const isReviewer = isInstructorOrAbove(user);
 
-    // Public classrooms — available to all authenticated users
     const classrooms = allClassrooms
-      .filter(c => c.visibility === 'public')
+      .filter(c => c.visibility === 'public' && c.lifecycleState !== 'archived')
       .map(c => ({
         id: c.id,
         name: c.stage?.name || c.id,
         instructor: c.ownerName || c.ownerId || 'Unknown',
         visibility: 'public' as const,
+        lifecycleState: c.lifecycleState ?? 'active',
+        sunsettingAt: c.sunsettingAt ?? null,
+        sunsettingMessage: c.sunsettingMessage ?? null,
+        successorId: c.successorId ?? null,
         enrolledCount: c.enrolledUserIds?.length || 0,
         alreadyEnrolled: Boolean(userId && (c.enrolledUserIds?.includes(userId) || c.ownerId === userId)),
       }));
 
-    // Pending review queue — only for instructors and admins
     const pendingClassrooms = isReviewer
       ? allClassrooms
-          .filter(c => c.visibility === 'pending')
+          .filter(c => c.visibility === 'pending' && c.lifecycleState !== 'archived')
           .map(c => ({
             id: c.id,
             name: c.stage?.name || c.id,

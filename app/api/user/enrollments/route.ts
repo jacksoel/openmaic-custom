@@ -7,8 +7,10 @@ import { createLogger } from '@/lib/logger';
 const log = createLogger('User Enrollments');
 
 /**
- * GET /api/user/enrollments — Returns classrooms the current user is enrolled in or owns.
- * Includes pendingSince for student-owned classrooms awaiting review.
+ * GET /api/user/enrollments
+ * Returns classrooms the current user is enrolled in or owns.
+ * Includes lifecycle fields so the dashboard can render sunsetting notices
+ * and a separate "Past Classrooms" section for archived classrooms.
  */
 export async function GET(request: NextRequest) {
   const authEnabled = process.env.AUTH_ENABLED === 'true';
@@ -33,6 +35,10 @@ export async function GET(request: NextRequest) {
           createdAt: c.createdAt,
           isOwner: c.ownerId === user.id,
           pendingSince: c.pendingSince ?? null,
+          lifecycleState: c.lifecycleState ?? 'active',
+          sunsettingAt: c.sunsettingAt ?? null,
+          sunsettingMessage: c.sunsettingMessage ?? null,
+          successorId: c.successorId ?? null,
         })),
       });
     }
@@ -47,6 +53,10 @@ export async function GET(request: NextRequest) {
         createdAt: c.createdAt,
         isOwner: false,
         pendingSince: null,
+        lifecycleState: 'active',
+        sunsettingAt: null,
+        sunsettingMessage: null,
+        successorId: null,
       })),
     });
   } catch (error) {
