@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuth } from "@/lib/auth";
 import { getConfig } from "@/lib/server/provider-config";
 
+const KEYLESS_PROVIDERS = new Set(["ollama", "lemonade"]);
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ) {
-  const authEnabled = process.env.AUTH_ENABLED === "true";
+  const authEnabled = process.env.AUTH_ENABLED !== "false";
   if (!authEnabled) {
     return NextResponse.json({ success: false, error: "Auth not enabled" }, { status: 400 });
   }
@@ -53,15 +55,22 @@ export async function POST(
     if (!apiKey) {
       const config = getConfig();
       const serverProvider = config.providers?.[slug];
-      if (serverProvider?.apiKey) {
-        apiKey = serverProvider.apiKey;
+      if (serverProvider) {
+        apiKey = serverProvider.apiKey || "";
         baseUrl = serverProvider.baseUrl || undefined;
         defaultModel = defaultModel || serverProvider.models?.[0] || undefined;
-        source = "institutional";
+        if (serverProvider.apiKey) {
+          source = "institutional";
+        } else if (serverProvider.baseUrl && KEYLESS_PROVIDERS.has(slug)) {
+          // Keyless provider with baseUrl configured (e.g. Ollama)
+          source = "institutional";
+        }
       }
     }
 
-    if (!apiKey) {
+    const isKeyless = KEYLESS_PROVIDERS.has(slug) && !apiKey && baseUrl;
+
+    if (!apiKey && !isKeyless) {
       return NextResponse.json({
         success: false,
         error: `No ${slug} provider configured. Add an API key or contact your admin.`,
@@ -74,13 +83,15 @@ export async function POST(
       "Content-Type": "application/json",
     };
 
-    if (slug === "anthropic") {
-      testHeaders["x-api-key"] = apiKey;
-      testHeaders["anthropic-version"] = "2023-06-01";
-    } else if (slug === "google") {
-      testUrl = testUrl + "?key=" + apiKey;
-    } else {
-      testHeaders["Authorization"] = "Bearer " + apiKey;
+    if (apiKey) {
+      if (slug === "anthropic") {
+        testHeaders["x-api-key"] = apiKey;
+        testHeaders["anthropic-version"] = "2023-06-01";
+      } else if (slug === "google") {
+        testUrl = testUrl + "?key=" + apiKey;
+      } else {
+        testHeaders["Authorization"] = "Bearer " + apiKey;
+      }
     }
 
     try {
@@ -130,6 +141,7 @@ export async function POST(
 }
 
 function getProviderTestUrl(slug: string): string {
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
   const urls: Record<string, string> = {
     openai: "https://api.openai.com/v1/chat/completions",
     anthropic: "https://api.anthropic.com/v1/messages",
@@ -138,6 +150,7 @@ function getProviderTestUrl(slug: string): string {
     qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
     grok: "https://api.x.ai/v1/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
+    ollama: `${ollamaBaseUrl}/api/chat`,
   };
   return urls[slug] || "https://api." + slug + ".com/v1/chat/completions";
 }
@@ -149,10 +162,12 @@ function getProviderTestPayload(slug: string, defaultModel?: string): object {
     case "qwen":
     case "grok":
     case "openrouter":
+    case "ollama":
       return {
-        model: defaultModel || "gpt-4o-mini",
+        model: defaultModel || (slug === "ollama" ? "gemma4:latest" : "gpt-4o-mini"),
         messages: [{ role: "user", content: "Hi" }],
         max_tokens: 1,
+        stream: false,
       };
     case "anthropic":
       return {
