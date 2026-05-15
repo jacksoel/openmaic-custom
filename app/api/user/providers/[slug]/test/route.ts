@@ -150,7 +150,8 @@ function getProviderTestUrl(slug: string): string {
     qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
     grok: "https://api.x.ai/v1/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
-    ollama: `${ollamaBaseUrl}/api/chat`,
+    // Ollama: use OpenAI-compatible /v1/chat/completions endpoint (matches provider type 'openai')
+    ollama: `${ollamaBaseUrl}/v1/chat/completions`,
   };
   return urls[slug] || "https://api." + slug + ".com/v1/chat/completions";
 }
@@ -164,7 +165,7 @@ function getProviderTestPayload(slug: string, defaultModel?: string): object {
     case "openrouter":
     case "ollama":
       return {
-        model: defaultModel || (slug === "ollama" ? "gemma4:latest" : "gpt-4o-mini"),
+        model: defaultModel || (slug === "ollama" ? "gemma3:1b" : "gpt-4o-mini"),
         messages: [{ role: "user", content: "Hi" }],
         max_tokens: 1,
         stream: false,

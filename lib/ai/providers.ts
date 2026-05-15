@@ -958,7 +958,14 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     icon: '/logos/ollama.svg',
     models: [
       {
-        id: 'llama3.3',
+        id: "gemma3:1b",
+        name: "Gemma 3 1B (local)",
+        contextWindow: 32768,
+        outputWindow: 4096,
+        capabilities: { streaming: true, tools: false, vision: false },
+      },
+      {
+        id: "llama3.3",
         name: 'Llama 3.3 70B',
         contextWindow: 131072,
         outputWindow: 4096,

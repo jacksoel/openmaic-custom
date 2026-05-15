@@ -10,7 +10,7 @@ services:
     network_mode: host
     volumes:
       # Optional: mount server-providers.yml for provider config
-      # - ./server-providers.yml:/app/server-providers.yml:ro
+      - ./server-providers.yml:/app/server-providers.yml:ro
       - openmaic-data:/app/data
       - openmaic-auth-db:/app/data/auth
     restart: unless-stopped
