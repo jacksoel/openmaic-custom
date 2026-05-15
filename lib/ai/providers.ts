@@ -953,7 +953,7 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
     id: 'ollama',
     name: 'Ollama',
     type: 'openai',
-    defaultBaseUrl: 'http://localhost:11434/v1',
+    defaultBaseUrl: 'http://127.0.0.1:11434/v1',
     requiresApiKey: false,
     icon: '/logos/ollama.svg',
     models: [

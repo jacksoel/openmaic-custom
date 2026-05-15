@@ -141,7 +141,7 @@ export async function POST(
 }
 
 function getProviderTestUrl(slug: string): string {
-  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
+  const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
   const urls: Record<string, string> = {
     openai: "https://api.openai.com/v1/chat/completions",
     anthropic: "https://api.anthropic.com/v1/messages",
