@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, ExternalLink, Clock, Users, X, Check } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Clock, Users, X, Check, UserCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 type Visibility = 'public' | 'enrolled' | 'private' | 'pending';
@@ -33,6 +33,13 @@ interface AuditEntry {
   oldValue: string | null;
   newValue: string | null;
   reason: string | null;
+}
+
+interface UserInfo {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
 }
 
 interface Stats {
@@ -102,8 +109,10 @@ function EditModal({ classroomId, onClose, onSaved }: EditModalProps) {
   const [tab, setTab]               = useState<'details' | 'history'>('details');
   const [detail, setDetail]         = useState<ClassroomDetail | null>(null);
   const [history, setHistory]       = useState<AuditEntry[]>([]);
+  const [userMap, setUserMap]       = useState<Map<string, UserInfo>>(new Map());
   const [loadingDetail, setLoadingDetail] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingUsers, setLoadingUsers]   = useState(true);
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
@@ -111,6 +120,7 @@ function EditModal({ classroomId, onClose, onSaved }: EditModalProps) {
   const [reason, setReason]                 = useState('');
   const [enrolledUserIds, setEnrolledUserIds] = useState<string[]>([]);
 
+  // Fetch classroom detail
   useEffect(() => {
     fetch(`/api/admin/classroom/${classroomId}`)
       .then(r => r.json())
@@ -126,6 +136,25 @@ function EditModal({ classroomId, onClose, onSaved }: EditModalProps) {
       .catch(() => setError('Network error'))
       .finally(() => setLoadingDetail(false));
   }, [classroomId]);
+
+  // Fetch user directory for enrolled user resolution
+  useEffect(() => {
+    fetch('/api/admin/users')
+      .then(r => r.json())
+      .then(data => {
+        if (data.users) {
+          const map = new Map<string, UserInfo>();
+          for (const u of data.users as UserInfo[]) {
+            map.set(u.id, u);
+          }
+          setUserMap(map);
+        }
+      })
+      .catch(() => {
+        // Silently fail — we'll fall back to showing UUIDs
+      })
+      .finally(() => setLoadingUsers(false));
+  }, []);
 
   const loadHistory = useCallback(() => {
     setLoadingHistory(true);
@@ -174,6 +203,15 @@ function EditModal({ classroomId, onClose, onSaved }: EditModalProps) {
   };
 
   const removeUser = (uid: string) => setEnrolledUserIds(prev => prev.filter(u => u !== uid));
+
+  // Resolve a user ID to a display name + email
+  const resolveUser = (uid: string): { displayName: string; displayEmail: string } => {
+    const user = userMap.get(uid);
+    if (user) {
+      return { displayName: user.name || 'Unknown', displayEmail: user.email };
+    }
+    return { displayName: uid.slice(0, 8) + '…', displayEmail: '' };
+  };
 
   return (
     <div
@@ -272,19 +310,36 @@ function EditModal({ classroomId, onClose, onSaved }: EditModalProps) {
                     </label>
                     {enrolledUserIds.length === 0 ? (
                       <p className="text-xs text-gray-400 dark:text-gray-500 italic">No enrolled users.</p>
+                    ) : loadingUsers ? (
+                      <div className="space-y-2">
+                        {enrolledUserIds.slice(0, 3).map(uid => (
+                          <div key={uid} className="h-7 animate-pulse rounded bg-gray-100 dark:bg-gray-700" />
+                        ))}
+                      </div>
                     ) : (
                       <div className="rounded-lg border border-gray-100 dark:border-gray-700 divide-y divide-gray-100 dark:divide-gray-700 max-h-44 overflow-y-auto">
-                        {enrolledUserIds.map(uid => (
-                          <div key={uid} className="flex items-center justify-between px-3 py-1.5">
-                            <span className="text-xs text-gray-600 dark:text-gray-400 font-mono truncate">{uid}</span>
-                            <button
-                              onClick={() => removeUser(uid)}
-                              className="ml-2 shrink-0 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
+                        {enrolledUserIds.map(uid => {
+                          const { displayName, displayEmail } = resolveUser(uid);
+                          return (
+                            <div key={uid} className="flex items-center justify-between px-3 py-1.5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <UserCircle className="w-4 h-4 text-gray-400 dark:text-gray-500 shrink-0" />
+                                <div className="min-w-0">
+                                  <p className="text-sm text-gray-800 dark:text-gray-200 truncate">{displayName}</p>
+                                  {displayEmail && (
+                                    <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{displayEmail}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeUser(uid)}
+                                className="ml-2 shrink-0 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -501,7 +556,7 @@ export default function AdminClassroomsPage() {
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden">
           {filtered.length === 0 ? (
             <div className="px-6 py-12 text-center text-gray-400 dark:text-gray-500">
-              No classrooms{filter !== 'all' ? ` with visibility “${filter}”` : ''}.
+              No classrooms{filter !== 'all' ? ` with visibility "${filter}"` : ''}.
             </div>
           ) : (
             <div className="overflow-x-auto">
