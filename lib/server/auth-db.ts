@@ -1,12 +1,5 @@
 /**
  * Auth Database — Server-only SQLite module
- *
- * Handles database initialization and direct queries for
- * better-auth tables and extension tables (user_providers, usage_logs,
- * classroom_audit_log).
- *
- * This module uses better-sqlite3 (Node.js native) and
- * must only be imported from server-side code.
  */
 
 import Database from 'better-sqlite3';
@@ -19,7 +12,6 @@ let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!_db) {
-    // Ensure the parent directory exists — better-sqlite3 won't create it.
     mkdirSync(path.dirname(DB_PATH), { recursive: true });
     _db = new Database(DB_PATH);
     _db.pragma('journal_mode = WAL');
@@ -28,10 +20,6 @@ export function getDb(): Database.Database {
   return _db;
 }
 
-/**
- * Initialize better-auth core tables.
- * These must exist before better-auth can function.
- */
 export function initBetterAuthTables(): void {
   const db = getDb();
 
@@ -93,19 +81,17 @@ export function initBetterAuthTables(): void {
     );
   `);
 
-  // Create indexes
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_session_token ON "session"(token);`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_session_userId ON "session"(userId);`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_account_userId ON "account"(userId);`);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_email ON "user"(email);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_session_token   ON "session"(token);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_session_userId  ON "session"(userId);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_account_userId  ON "account"(userId);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_email      ON "user"(email);`);
+
+  // Idempotent column migrations
+  try { db.exec(`ALTER TABLE "user" ADD COLUMN preferences TEXT;`); } catch { /* already exists */ }
 
   console.log('[Auth] better-auth core tables initialized');
 }
 
-/**
- * Initialize extension tables (user_providers, usage_logs, classroom_audit_log).
- * Called once at server startup.
- */
 export function initAuthDb(): void {
   const db = getDb();
 
@@ -125,10 +111,7 @@ export function initAuthDb(): void {
     );
   `);
 
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_user_providers_userId
-    ON user_providers(userId);
-  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_providers_userId ON user_providers(userId);`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS usage_logs (
@@ -142,15 +125,8 @@ export function initAuthDb(): void {
     );
   `);
 
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_usage_logs_userId
-    ON usage_logs(userId);
-  `);
-
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_usage_logs_createdAt
-    ON usage_logs(createdAt);
-  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_logs_userId    ON usage_logs(userId);`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_usage_logs_createdAt ON usage_logs(createdAt);`);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS classroom_audit_log (

@@ -6,6 +6,7 @@ import './globals.css';
 import 'animate.css';
 import 'katex/dist/katex.min.css';
 import { ThemeProvider } from '@/lib/hooks/use-theme';
+import { PreferencesProvider } from '@/lib/hooks/use-preferences';
 import { I18nProvider } from '@/lib/hooks/use-i18n';
 import { Toaster } from '@/components/ui/sonner';
 import { ServerProvidersInit } from '@/components/server-providers-init';
@@ -35,11 +36,13 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ThemeProvider>
-          <I18nProvider>
-            <ServerProvidersInit />
-            <AppGuard>{children}</AppGuard>
-            <Toaster position="top-center" />
-          </I18nProvider>
+          <PreferencesProvider>
+            <I18nProvider>
+              <ServerProvidersInit />
+              <AppGuard>{children}</AppGuard>
+              <Toaster position="top-center" />
+            </I18nProvider>
+          </PreferencesProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession, signOut } from '@/lib/auth-client';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { usePreferences } from '@/lib/hooks/use-preferences';
 import { LogOut, Key } from 'lucide-react';
 
 interface EnrolledClassroom {
@@ -81,17 +82,32 @@ function DashboardSkeleton() {
 function DashboardContent() {
   const router = useRouter();
   const { data: session } = useSession();
+  const { prefs, setPref, loaded: prefsLoaded } = usePreferences();
   const sessionUser = session?.user as { id: string; email: string; name?: string | null; role?: string | null } | undefined;
   const user = sessionUser
     ? { id: sessionUser.id, email: sessionUser.email, name: sessionUser.name || sessionUser.email, role: sessionUser.role || 'student' }
     : null;
 
-  const [classrooms, setClassrooms] = useState<EnrolledClassroom[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [classrooms, setClassrooms]           = useState<EnrolledClassroom[]>([]);
+  const [loading, setLoading]                 = useState(true);
+  const [error, setError]                     = useState<string | null>(null);
   const [newEnrollmentCount, setNewEnrollmentCount] = useState(0);
   const [updatingVisibility, setUpdatingVisibility] = useState<string | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived]       = useState(false);
+
+  // Apply persisted preference once prefs are loaded from server
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    if (prefs.dashboardArchivedExpanded !== undefined) {
+      setShowArchived(prefs.dashboardArchivedExpanded);
+    }
+  }, [prefsLoaded, prefs.dashboardArchivedExpanded]);
+
+  const toggleArchived = () => {
+    const next = !showArchived;
+    setShowArchived(next);
+    setPref('dashboardArchivedExpanded', next);
+  };
 
   useEffect(() => {
     async function loadClassrooms() {
@@ -158,8 +174,8 @@ function DashboardContent() {
   if (loading) return <DashboardSkeleton />;
 
   const isInstructorOrAdmin = user?.role === 'admin' || user?.role === 'instructor';
-  const activeClassrooms   = classrooms.filter(c => c.lifecycleState !== 'archived');
-  const archivedClassrooms = classrooms.filter(c => c.lifecycleState === 'archived');
+  const activeClassrooms    = classrooms.filter(c => c.lifecycleState !== 'archived');
+  const archivedClassrooms  = classrooms.filter(c => c.lifecycleState === 'archived');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
@@ -176,22 +192,14 @@ function DashboardContent() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => router.push('/')}
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
+            <button onClick={() => router.push('/')} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
               Create Classroom
             </button>
             {user?.role === 'admin' && (
-              <button
-                onClick={() => router.push('/admin')}
-                className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200"
-              >
-                Admin
-              </button>
+              <button onClick={() => router.push('/admin')} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Admin</button>
             )}
-            <button onClick={() => router.push('/enroll')} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Join a Classroom</button>
-            <button onClick={() => router.push('/catalog')} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Browse Classrooms</button>
+            <button onClick={() => router.push('/enroll')}   className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Join a Classroom</button>
+            <button onClick={() => router.push('/catalog')}  className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Browse Classrooms</button>
             <ThemeToggle />
             <button onClick={handleSignOut} className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" title="Sign out">
               <LogOut className="w-4 h-4" />
@@ -231,7 +239,7 @@ function DashboardContent() {
             <h2 className="mt-4 text-lg font-semibold text-gray-900 dark:text-gray-100">No classrooms yet</h2>
             <p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">Ask your instructor for a classroom code, or browse open classrooms to get started.</p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-              <button onClick={() => router.push('/enroll')} className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">Join with Code</button>
+              <button onClick={() => router.push('/enroll')}  className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">Join with Code</button>
               <button onClick={() => router.push('/catalog')} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-5 py-2.5 text-sm font-medium transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-gray-200">Browse Open Classrooms</button>
             </div>
           </div>
@@ -252,81 +260,51 @@ function DashboardContent() {
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="font-semibold text-gray-900 dark:text-gray-100 transition-colors group-hover:text-primary leading-snug">{classroom.name}</h3>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {classroom.isOwner && (
-                          <span className="rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">Owner</span>
-                        )}
-                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${visibilityBadgeClass(classroom.visibility)}`}>
-                          {visibilityLabel(classroom.visibility)}
-                        </span>
+                        {classroom.isOwner && <span className="rounded-full bg-blue-100 dark:bg-blue-900/30 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-400">Owner</span>}
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${visibilityBadgeClass(classroom.visibility)}`}>{visibilityLabel(classroom.visibility)}</span>
                       </div>
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{classroom.instructor}</p>
                     <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">{new Date(classroom.createdAt).toLocaleDateString()}</p>
                   </button>
 
-                  {/* Sunsetting notice */}
                   {isSunsetting && classroom.sunsettingAt && (
                     <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-3 py-2">
-                      <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
-                        ⏳ Closing {new Date(classroom.sunsettingAt).toLocaleDateString()}
-                      </p>
-                      {classroom.sunsettingMessage && (
-                        <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">{classroom.sunsettingMessage}</p>
-                      )}
+                      <p className="text-xs font-medium text-amber-800 dark:text-amber-300">⏳ Closing {new Date(classroom.sunsettingAt).toLocaleDateString()}</p>
+                      {classroom.sunsettingMessage && <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">{classroom.sunsettingMessage}</p>}
                       {classroom.successorId && (
-                        <button
-                          onClick={() => router.push(`/classroom/${classroom.successorId}`)}
-                          className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline"
-                        >
-                          Join next cohort →
-                        </button>
+                        <button onClick={() => router.push(`/classroom/${classroom.successorId}`)} className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300 hover:underline">Join next cohort →</button>
                       )}
                     </div>
                   )}
 
-                  {/* Visibility control */}
                   {classroom.isOwner && options.length > 0 && (
                     <div className="flex items-center gap-2 rounded-lg border border-gray-100 dark:border-gray-700/60 bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs">
                       <span className="text-gray-400 dark:text-gray-500 shrink-0">Visibility</span>
-                      <select
-                        value={classroom.visibility}
-                        onChange={e => handleVisibilityChange(classroom.id, e.target.value)}
-                        disabled={updatingVisibility === classroom.id}
-                        className="flex-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer disabled:opacity-50"
-                      >
-                        {options.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                      <select value={classroom.visibility} onChange={e => handleVisibilityChange(classroom.id, e.target.value)} disabled={updatingVisibility === classroom.id} className="flex-1 bg-transparent text-xs text-gray-700 dark:text-gray-300 outline-none cursor-pointer disabled:opacity-50">
+                        {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                       </select>
                       {updatingVisibility === classroom.id && <span className="text-gray-400 shrink-0">Saving…</span>}
                     </div>
                   )}
 
-                  {isLocked && (
-                    <p className="px-1 text-xs text-muted-foreground">Visibility managed by instructor or admin.</p>
-                  )}
+                  {isLocked && <p className="px-1 text-xs text-muted-foreground">Visibility managed by instructor or admin.</p>}
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Past Classrooms */}
         {archivedClassrooms.length > 0 && (
           <div className="mt-10">
-            <button
-              onClick={() => setShowArchived(v => !v)}
-              className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-            >
+            <button onClick={toggleArchived} className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
               <span className="text-xs">{showArchived ? '▼' : '▶'}</span>
               Past Classrooms ({archivedClassrooms.length})
             </button>
             {showArchived && (
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {archivedClassrooms.map(classroom => (
-                  <button
-                    key={classroom.id}
-                    onClick={() => router.push(`/classroom/${classroom.id}`)}
-                    className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 text-left shadow-sm opacity-60 hover:opacity-90 transition-opacity"
-                  >
+                  <button key={classroom.id} onClick={() => router.push(`/classroom/${classroom.id}`)} className="group rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 text-left shadow-sm opacity-60 hover:opacity-90 transition-opacity">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="font-semibold text-gray-700 dark:text-gray-300 leading-snug">{classroom.name}</h3>
                       <span className="rounded-full bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-[10px] font-medium text-gray-500 dark:text-gray-400 shrink-0">Concluded</span>
