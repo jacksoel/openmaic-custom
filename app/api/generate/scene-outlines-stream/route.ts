@@ -35,6 +35,7 @@ import type {
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModelFromRequest } from '@/lib/server/resolve-model';
+import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
 const log = createLogger('Outlines Stream');
 
 export const maxDuration = 300;
@@ -130,6 +131,16 @@ export async function POST(req: NextRequest) {
   let requirementSnippet: string | undefined;
   let resolvedModelString: string | undefined;
   try {
+    // Content generation is restricted to instructors and admins.
+    const authEnabled = process.env.AUTH_ENABLED === 'true';
+    if (authEnabled) {
+      const user = await getSessionUser(req);
+      if (!user) return apiError('UNAUTHORIZED', 401, 'Authentication required');
+      if (!isInstructorOrAbove(user)) {
+        return apiError('INVALID_REQUEST', 403, 'Only instructors and admins can generate classroom content');
+      }
+    }
+
     const body = await req.json();
 
     // Get API configuration from request headers/body
