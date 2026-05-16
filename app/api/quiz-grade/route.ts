@@ -10,6 +10,8 @@ import { callLLM } from '@/lib/ai/llm';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromRequest } from '@/lib/server/resolve-model';
+import { getSessionUser } from '@/lib/auth';
+import { canUseProvider } from '@/lib/server/provider-resolver';
 const log = createLogger('Quiz Grade');
 
 interface GradeRequest {
@@ -29,6 +31,22 @@ export async function POST(req: NextRequest) {
   let questionSnippet: string | undefined;
   let resolvedPoints: number | undefined;
   try {
+    // Auth: when enabled, require login and check institutional key access.
+    const authEnabled = process.env.AUTH_ENABLED === 'true';
+    if (authEnabled) {
+      const user = await getSessionUser(req);
+      if (!user) return apiError('UNAUTHORIZED', 401, 'Authentication required');
+      // If no client API key is supplied, the institutional key would be used.
+      const clientApiKey = req.headers.get('x-api-key');
+      if (!clientApiKey && !canUseProvider(user.role, 'institutional')) {
+        return apiError(
+          'INVALID_REQUEST',
+          403,
+          'Your role does not have access to institutional AI providers. Contact your administrator.',
+        );
+      }
+    }
+
     const body = (await req.json()) as GradeRequest;
     const { question, userAnswer, points, commentPrompt, language } = body;
     questionSnippet = question?.substring(0, 60);
@@ -49,20 +67,12 @@ export async function POST(req: NextRequest) {
     const isZh = language === 'zh-CN';
 
     const systemPrompt = isZh
-      ? `你是一位专业的教育评估专家。请根据题目和学生答案进行评分并给出简短评语。
-必须以如下 JSON 格式回复（不要包含其他内容）：
-{"score": <0到${points}的整数>, "comment": "<一两句评语>"}`
-      : `You are a professional educational assessor. Grade the student's answer and provide brief feedback.
-You must reply in the following JSON format only (no other content):
-{"score": <integer from 0 to ${points}>, "comment": "<one or two sentences of feedback>"}`;
+      ? `你是一位专业的教育评估专家。请根据题目和学生答案进行评分并给出简短评语。\n必须以如下 JSON 格式回复（不要包含其他内容）：\n{"score": <0到${points}的整数>, "comment": "<一两句评语>"}`
+      : `You are a professional educational assessor. Grade the student's answer and provide brief feedback.\nYou must reply in the following JSON format only (no other content):\n{"score": <integer from 0 to ${points}>, "comment": "<one or two sentences of feedback>"}`;
 
     const userPrompt = isZh
-      ? `题目：${question}
-满分：${points}分
-${commentPrompt ? `评分要点：${commentPrompt}\n` : ''}学生答案：${userAnswer}`
-      : `Question: ${question}
-Full marks: ${points} points
-${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${userAnswer}`;
+      ? `题目：${question}\n满分：${points}分\n${commentPrompt ? `评分要点：${commentPrompt}\n` : ''}学生答案：${userAnswer}`
+      : `Question: ${question}\nFull marks: ${points} points\n${commentPrompt ? `Grading guidance: ${commentPrompt}\n` : ''}Student answer: ${userAnswer}`;
 
     const result = await callLLM(
       {

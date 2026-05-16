@@ -26,6 +26,7 @@ import type { SpeechAction } from '@/lib/types/action';
 import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { resolveModelFromRequest } from '@/lib/server/resolve-model';
+import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
 
 const log = createLogger('Scene Actions API');
 
@@ -35,6 +36,16 @@ export async function POST(req: NextRequest) {
   let outlineTitle: string | undefined;
   let resolvedModelString: string | undefined;
   try {
+    // Content generation is restricted to instructors and admins.
+    const authEnabled = process.env.AUTH_ENABLED === 'true';
+    if (authEnabled) {
+      const user = await getSessionUser(req);
+      if (!user) return apiError('UNAUTHORIZED', 401, 'Authentication required');
+      if (!isInstructorOrAbove(user)) {
+        return apiError('INVALID_REQUEST', 403, 'Only instructors and admins can generate classroom content');
+      }
+    }
+
     const body = await req.json();
     const {
       outline,
