@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyHs256Jwt, type JwtClaims } from '@/lib/sso/verify';
+import {
+  LEGACY_ACCESS_COOKIE,
+  SSO_INJECTED_HEADERS,
+  SSO_SESSION_COOKIE,
+} from '@/lib/sso/cookies';
 
-/** Convert string to Uint8Array */
 function encode(str: string): Uint8Array {
   return new TextEncoder().encode(str);
 }
 
-/** Convert ArrayBuffer to hex string */
 function bufToHex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
-/** Verify an HMAC-signed token using Web Crypto API (Edge-compatible) */
-async function verifyToken(token: string, accessCode: string): Promise<boolean> {
+/** Verify the legacy single-secret ACCESS_CODE cookie (timestamp.signature). */
+async function verifyLegacyToken(token: string, accessCode: string): Promise<boolean> {
   const dotIndex = token.indexOf('.');
   if (dotIndex === -1) return false;
 
@@ -30,9 +34,10 @@ async function verifyToken(token: string, accessCode: string): Promise<boolean> 
   );
 
   const data = encode(timestamp);
-  const expected = bufToHex(await crypto.subtle.sign('HMAC', key, data.buffer as ArrayBuffer));
+  const expected = bufToHex(
+    await crypto.subtle.sign('HMAC', key, data.buffer as ArrayBuffer),
+  );
 
-  // Constant-length comparison (not truly constant-time in JS, but sufficient here)
   if (signature.length !== expected.length) return false;
   let mismatch = 0;
   for (let i = 0; i < signature.length; i++) {
@@ -41,35 +46,85 @@ async function verifyToken(token: string, accessCode: string): Promise<boolean> 
   return mismatch === 0;
 }
 
+/** Strip headers that only the SSO middleware is allowed to set. */
+function stripSpoofableHeaders(request: NextRequest): Headers {
+  const cleaned = new Headers(request.headers);
+  for (const h of SSO_INJECTED_HEADERS) cleaned.delete(h);
+  return cleaned;
+}
+
+function injectIdentity(headers: Headers, claims: JwtClaims): Headers {
+  const out = new Headers(headers);
+  out.set('x-maic-user', claims.sub);
+  if (claims.name) out.set('x-maic-name', claims.name);
+  if (claims.email) out.set('x-maic-email', claims.email);
+  if (claims.roles && claims.roles.length > 0) {
+    out.set('x-maic-roles', claims.roles.join(','));
+  }
+  if (claims.tenant) out.set('x-maic-tenant', claims.tenant);
+  if (claims.classroom) out.set('x-maic-classroom', claims.classroom);
+  return out;
+}
+
+function passThrough(headers: Headers): NextResponse {
+  return NextResponse.next({ request: { headers } });
+}
+
 export async function middleware(request: NextRequest) {
   const accessCode = process.env.ACCESS_CODE;
-  if (!accessCode) {
-    return NextResponse.next();
+  const ssoSecret = process.env.MAIC_LAUNCH_SECRET;
+
+  // Always strip spoofable identity headers, even in open mode.
+  const cleanHeaders = stripSpoofableHeaders(request);
+
+  if (!accessCode && !ssoSecret) {
+    return passThrough(cleanHeaders);
   }
 
   const { pathname } = request.nextUrl;
 
-  // Whitelist: access-code endpoints, health check
+  // Whitelist: access-code endpoints (sso, verify, status, logout) and health.
   if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {
-    return NextResponse.next();
+    return passThrough(cleanHeaders);
   }
 
-  // Check cookie — validate HMAC signature, not just existence
-  const cookie = request.cookies.get('openmaic_access');
-  if (cookie?.value && (await verifyToken(cookie.value, accessCode))) {
-    return NextResponse.next();
+  // 1. SSO session cookie (preferred when MAIC_LAUNCH_SECRET is set).
+  if (ssoSecret) {
+    const session = request.cookies.get(SSO_SESSION_COOKIE)?.value;
+    if (session) {
+      try {
+        const claims = await verifyHs256Jwt(session, ssoSecret);
+        return passThrough(injectIdentity(cleanHeaders, claims));
+      } catch {
+        // Fall through to legacy or unauthenticated handling.
+      }
+    }
   }
 
-  // API requests without valid cookie → 401
+  // 2. Legacy ACCESS_CODE cookie.
+  if (accessCode) {
+    const cookie = request.cookies.get(LEGACY_ACCESS_COOKIE)?.value;
+    if (cookie && (await verifyLegacyToken(cookie, accessCode))) {
+      return passThrough(cleanHeaders);
+    }
+  }
+
+  // No valid auth.
   if (pathname.startsWith('/api/')) {
     return NextResponse.json(
-      { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
+      {
+        success: false,
+        errorCode: 'INVALID_REQUEST',
+        error: 'Authentication required',
+      },
       { status: 401 },
     );
   }
 
-  // Page requests → let through, frontend shows modal
-  return NextResponse.next();
+  // Page requests fall through to the app so the existing access-code modal
+  // (or, in the SSO-only case, a future "launch from Space Agent" prompt) can
+  // render. This preserves the prior UX for legacy deployments.
+  return passThrough(cleanHeaders);
 }
 
 export const config = {
