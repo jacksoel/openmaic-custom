@@ -11,6 +11,7 @@ import { decodeBase64Url, encodeBase64Url } from './base64url';
  *   roles     — flat list, e.g. ["admin"] or ["student"]
  *   tenant    — deployment / course-group namespace
  *   classroom — target classroom id (informs the post-SSO redirect)
+ *   courses   — optional list of course ids the user is enrolled in
  */
 export interface JwtClaims {
   sub: string;
@@ -19,6 +20,7 @@ export interface JwtClaims {
   roles?: string[];
   tenant?: string;
   classroom?: string;
+  courses?: string[];
   iat: number;
   exp: number;
   jti?: string;

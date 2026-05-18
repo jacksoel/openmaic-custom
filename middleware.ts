@@ -5,6 +5,13 @@ import {
   SSO_INJECTED_HEADERS,
   SSO_SESSION_COOKIE,
 } from '@/lib/sso/cookies';
+import { isRevoked } from '@/lib/sso/denylist';
+
+// Node runtime so the in-process denylist Map (anchored on globalThis) is
+// shared between this middleware and the /api/access-code/revoke handler.
+// Without this, Edge runtime sandboxes the module graph and revokes would
+// never be visible to verifying requests.
+export const runtime = 'nodejs';
 
 function encode(str: string): Uint8Array {
   return new TextEncoder().encode(str);
@@ -63,6 +70,9 @@ function injectIdentity(headers: Headers, claims: JwtClaims): Headers {
   }
   if (claims.tenant) out.set('x-maic-tenant', claims.tenant);
   if (claims.classroom) out.set('x-maic-classroom', claims.classroom);
+  if (claims.courses && claims.courses.length > 0) {
+    out.set('x-maic-courses', claims.courses.join(','));
+  }
   return out;
 }
 
@@ -83,7 +93,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Whitelist: access-code endpoints (sso, verify, status, logout) and health.
+  // Whitelist: access-code endpoints (sso, verify, status, logout, revoke)
+  // and health. Revoke is also gated by its own internal-token check.
   if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {
     return passThrough(cleanHeaders);
   }
@@ -94,7 +105,11 @@ export async function middleware(request: NextRequest) {
     if (session) {
       try {
         const claims = await verifyHs256Jwt(session, ssoSecret);
-        return passThrough(injectIdentity(cleanHeaders, claims));
+        if (!isRevoked({ sub: claims.sub, jti: claims.jti, iat: claims.iat })) {
+          return passThrough(injectIdentity(cleanHeaders, claims));
+        }
+        // Revoked: fall through to legacy / unauth (and the stale cookie
+        // will be replaced or cleared on next sign-in / logout).
       } catch {
         // Fall through to legacy or unauthenticated handling.
       }

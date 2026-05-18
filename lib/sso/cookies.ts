@@ -17,4 +17,13 @@ export const SSO_INJECTED_HEADERS = [
   'x-maic-roles',
   'x-maic-tenant',
   'x-maic-classroom',
+  'x-maic-courses',
 ] as const;
+
+/**
+ * Header that server-to-server callers (e.g. Space Agent invoking
+ * /api/access-code/revoke) present so the receiver can verify the call
+ * came from inside the trust boundary. The public Caddy / Nginx config
+ * strips this header at the edge.
+ */
+export const INTERNAL_TOKEN_HEADER = 'x-maic-internal-token';

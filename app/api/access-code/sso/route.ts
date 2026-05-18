@@ -52,6 +52,9 @@ export async function GET(request: NextRequest) {
     roles: launchClaims.roles ?? [],
     ...(launchClaims.tenant ? { tenant: launchClaims.tenant } : {}),
     ...(launchClaims.classroom ? { classroom: launchClaims.classroom } : {}),
+    ...(launchClaims.courses && launchClaims.courses.length > 0
+      ? { courses: launchClaims.courses }
+      : {}),
     iat: now,
     exp: now + SSO_SESSION_TTL_SECONDS,
     jti: crypto.randomUUID(),
