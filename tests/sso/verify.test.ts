@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EXPECTED_AUDIENCE, EXPECTED_ISSUER } from '@/lib/sso/claims';
 import {
   JwtVerifyError,
   signHs256Jwt,
@@ -12,34 +13,59 @@ function baseClaims(overrides: Partial<JwtClaims> = {}): JwtClaims {
   const now = Math.floor(Date.now() / 1000);
   return {
     sub: 'eric.jackson',
-    name: 'Eric Jackson',
-    roles: ['_admin'],
-    tenant: 'colony5148351',
-    classroom: 'intro-to-dora',
+    iss: EXPECTED_ISSUER,
+    aud: EXPECTED_AUDIENCE,
     iat: now,
     exp: now + 60,
     jti: crypto.randomUUID(),
+    name: 'Eric Jackson',
+    space: { groups: ['_admin'], sessionId: 'space-sess-abc' },
     ...overrides,
   };
 }
 
 describe('sso/verify', () => {
-  it('round-trips a valid token', async () => {
+  it('round-trips a valid token with namespaced claims', async () => {
     const claims = baseClaims();
     const jwt = await signHs256Jwt(claims, SECRET);
     const parsed = await verifyHs256Jwt(jwt, SECRET);
     expect(parsed.sub).toBe('eric.jackson');
-    expect(parsed.roles).toEqual(['_admin']);
-    expect(parsed.classroom).toBe('intro-to-dora');
+    expect(parsed.iss).toBe(EXPECTED_ISSUER);
+    expect(parsed.aud).toBe(EXPECTED_AUDIENCE);
+    expect(parsed.space?.groups).toEqual(['_admin']);
+    expect(parsed.space?.sessionId).toBe('space-sess-abc');
   });
 
-  it('preserves the optional courses claim', async () => {
+  it('accepts an aud claim that is an array containing the expected value', async () => {
     const jwt = await signHs256Jwt(
-      baseClaims({ courses: ['dora-metrics', 'ip-addressing'] }),
+      baseClaims({ aud: ['openmaic', 'other-relying-party'] }),
       SECRET,
     );
     const parsed = await verifyHs256Jwt(jwt, SECRET);
-    expect(parsed.courses).toEqual(['dora-metrics', 'ip-addressing']);
+    expect(parsed.aud).toEqual(['openmaic', 'other-relying-party']);
+  });
+
+  it('rejects a token with the wrong audience', async () => {
+    const jwt = await signHs256Jwt(baseClaims({ aud: 'someone-else' }), SECRET);
+    await expect(verifyHs256Jwt(jwt, SECRET)).rejects.toMatchObject({
+      code: 'BAD_AUDIENCE',
+    });
+  });
+
+  it('rejects a token with the wrong issuer', async () => {
+    const jwt = await signHs256Jwt(baseClaims({ iss: 'evil-issuer' }), SECRET);
+    await expect(verifyHs256Jwt(jwt, SECRET)).rejects.toMatchObject({
+      code: 'BAD_ISSUER',
+    });
+  });
+
+  it('allows iss/aud checks to be opted out per call', async () => {
+    const jwt = await signHs256Jwt(baseClaims({ iss: 'whatever', aud: 'whatever' }), SECRET);
+    const parsed = await verifyHs256Jwt(jwt, SECRET, {
+      expectedIssuer: null,
+      expectedAudience: null,
+    });
+    expect(parsed.sub).toBe('eric.jackson');
   });
 
   it('rejects a tampered signature', async () => {
@@ -71,7 +97,6 @@ describe('sso/verify', () => {
   });
 
   it('rejects an unsupported algorithm header', async () => {
-    // Hand-craft an alg=none header so the parser sees BAD_ALG before signature check.
     const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' }))
       .toString('base64')
       .replace(/\+/g, '-')

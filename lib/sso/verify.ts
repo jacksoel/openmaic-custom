@@ -1,30 +1,9 @@
 import { decodeBase64Url, encodeBase64Url } from './base64url';
-
-/**
- * Claims carried in both the short-lived launch JWT (minted by Space Agent)
- * and the longer-lived session JWT (issued by /api/access-code/sso).
- *
- * Custom claims map to a thin LMS shell:
- *   sub       — stable user id from the identity provider (Space Agent)
- *   name      — display name
- *   email     — optional contact
- *   roles     — flat list, e.g. ["admin"] or ["student"]
- *   tenant    — deployment / course-group namespace
- *   classroom — target classroom id (informs the post-SSO redirect)
- *   courses   — optional list of course ids the user is enrolled in
- */
-export interface JwtClaims {
-  sub: string;
-  name?: string;
-  email?: string;
-  roles?: string[];
-  tenant?: string;
-  classroom?: string;
-  courses?: string[];
-  iat: number;
-  exp: number;
-  jti?: string;
-}
+import {
+  EXPECTED_AUDIENCE,
+  EXPECTED_ISSUER,
+  type JwtClaims,
+} from './claims';
 
 interface JwtHeader {
   alg: string;
@@ -39,6 +18,9 @@ export class JwtVerifyError extends Error {
       | 'BAD_SIGNATURE'
       | 'EXPIRED'
       | 'FUTURE_IAT'
+      | 'NOT_YET_VALID'
+      | 'BAD_ISSUER'
+      | 'BAD_AUDIENCE'
       | 'MISSING_SUB',
     message: string,
   ) {
@@ -57,7 +39,23 @@ async function importHmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-export async function verifyHs256Jwt(token: string, secret: string): Promise<JwtClaims> {
+function audMatches(aud: string | string[] | undefined, expected: string): boolean {
+  if (Array.isArray(aud)) return aud.includes(expected);
+  return aud === expected;
+}
+
+interface VerifyOptions {
+  /** If set, the JWT's `iss` claim must match. Defaults to EXPECTED_ISSUER. */
+  expectedIssuer?: string | null;
+  /** If set, the JWT's `aud` claim must include this value. Defaults to EXPECTED_AUDIENCE. */
+  expectedAudience?: string | null;
+}
+
+export async function verifyHs256Jwt(
+  token: string,
+  secret: string,
+  opts: VerifyOptions = {},
+): Promise<JwtClaims> {
   const parts = token.split('.');
   if (parts.length !== 3) {
     throw new JwtVerifyError('MALFORMED', 'JWT must have three segments');
@@ -98,8 +96,22 @@ export async function verifyHs256Jwt(token: string, secret: string): Promise<Jwt
   if (typeof payload.iat === 'number' && payload.iat > now + 60) {
     throw new JwtVerifyError('FUTURE_IAT', 'JWT iat is in the future');
   }
+  if (typeof payload.nbf === 'number' && payload.nbf > now + 60) {
+    throw new JwtVerifyError('NOT_YET_VALID', 'JWT nbf is in the future');
+  }
   if (!payload.sub || typeof payload.sub !== 'string') {
     throw new JwtVerifyError('MISSING_SUB', 'JWT missing sub claim');
+  }
+
+  const expectedIss = opts.expectedIssuer === undefined ? EXPECTED_ISSUER : opts.expectedIssuer;
+  if (expectedIss && payload.iss !== expectedIss) {
+    throw new JwtVerifyError('BAD_ISSUER', `JWT iss "${payload.iss}" does not match expected "${expectedIss}"`);
+  }
+
+  const expectedAud =
+    opts.expectedAudience === undefined ? EXPECTED_AUDIENCE : opts.expectedAudience;
+  if (expectedAud && !audMatches(payload.aud, expectedAud)) {
+    throw new JwtVerifyError('BAD_AUDIENCE', `JWT aud does not include "${expectedAud}"`);
   }
 
   return payload;
@@ -119,3 +131,5 @@ export async function signHs256Jwt(claims: JwtClaims, secret: string): Promise<s
   );
   return `${signingInput}.${encodeBase64Url(new Uint8Array(sig))}`;
 }
+
+export type { JwtClaims } from './claims';

@@ -1,145 +1,153 @@
+/**
+ * OpenMAIC Auth Middleware
+ *
+ * Flow:
+ * 1. If neither auth system is enabled, pass through
+ * 2. Always allow public paths (auth pages, health, assets)
+ * 3. AUTH_ENABLED mode: check better-auth session cookie OR SSO cookie
+ * 4. ACCESS_CODE mode: verify HMAC-signed cookie with Web Crypto
+ *
+ * Identity is NOT injected as request headers (that pattern breaks Next.js
+ * route resolution in some versions). Route handlers resolve identity
+ * via getSessionUser() directly. Upstream SSO x-maic-* headers pass through
+ * unmodified for handlers that want them as fallback.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyHs256Jwt, type JwtClaims } from '@/lib/sso/verify';
-import {
-  LEGACY_ACCESS_COOKIE,
-  SSO_INJECTED_HEADERS,
-  SSO_SESSION_COOKIE,
-} from '@/lib/sso/cookies';
-import { isRevoked } from '@/lib/sso/denylist';
 
-// Node runtime so the in-process denylist Map (anchored on globalThis) is
-// shared between this middleware and the /api/access-code/revoke handler.
-// Without this, Edge runtime sandboxes the module graph and revokes would
-// never be visible to verifying requests.
-export const runtime = 'nodejs';
+const PUBLIC_PATHS = [
+  '/api/auth',         // better-auth endpoints
+  '/api/health',       // health check
+  '/api/whoami',       // debug identity endpoint
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/api/access-code',  // SSO launch + legacy access-code endpoints
+];
 
-function encode(str: string): Uint8Array {
-  return new TextEncoder().encode(str);
+function isPublicPath(pathname: string): boolean {
+  return PUBLIC_PATHS.some(path => pathname.startsWith(path));
 }
 
-function bufToHex(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+/**
+ * Presence check only — full session validation happens in API route handlers
+ * via getSessionUser(). Middleware keeps latency low by avoiding a DB round-trip
+ * (or a JWT verify) on every request; an expired/tampered/revoked cookie is
+ * caught at the handler layer.
+ *
+ * Recognises both better-auth session cookies (native multi-user auth) and
+ * the openmaic_session cookie (Space Agent SSO bridge). Either is enough to
+ * pass through; getSessionUser() then prefers native over SSO if both exist.
+ */
+function hasSessionCookie(request: NextRequest): boolean {
+  const names = [
+    '__Secure-better-auth.session_token',
+    'better-auth.session_token',
+    '__Secure-better-auth.session_data',
+    'better-auth.session_data',
+    'openmaic_session', // SSO launch-token session (lib/sso/cookies.ts)
+  ];
+  return names.some(name => !!request.cookies.get(name)?.value);
 }
 
-/** Verify the legacy single-secret ACCESS_CODE cookie (timestamp.signature). */
-async function verifyLegacyToken(token: string, accessCode: string): Promise<boolean> {
+/**
+ * Verify an HMAC-signed openmaic_access cookie using Web Crypto (Edge-compatible).
+ * Token format: `${timestamp}.${hex-signature}`
+ * Signature  = HMAC-SHA256(key=accessCode, data=timestamp)
+ * Tokens older than 7 days are rejected regardless of signature validity.
+ */
+async function verifyAccessToken(token: string, accessCode: string): Promise<boolean> {
   const dotIndex = token.indexOf('.');
   if (dotIndex === -1) return false;
 
   const timestamp = token.substring(0, dotIndex);
-  const signature = token.substring(dotIndex + 1);
+  const hexSig    = token.substring(dotIndex + 1);
 
-  const keyData = encode(accessCode);
+  // Reject non-numeric or expired timestamps
+  const ts = parseInt(timestamp, 10);
+  if (isNaN(ts) || Date.now() - ts > 7 * 24 * 60 * 60 * 1000) return false;
+
+  // Decode hex signature to bytes
+  if (hexSig.length === 0 || hexSig.length % 2 !== 0) return false;
+  const sigBytes = new Uint8Array(hexSig.length / 2);
+  for (let i = 0; i < hexSig.length; i += 2) {
+    const byte = parseInt(hexSig.substring(i, i + 2), 16);
+    if (isNaN(byte)) return false;
+    sigBytes[i / 2] = byte;
+  }
+
+  const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
-    keyData.buffer as ArrayBuffer,
+    enc.encode(accessCode),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign'],
+    ['verify'],
   );
 
-  const data = encode(timestamp);
-  const expected = bufToHex(
-    await crypto.subtle.sign('HMAC', key, data.buffer as ArrayBuffer),
-  );
-
-  if (signature.length !== expected.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < signature.length; i++) {
-    mismatch |= signature.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return mismatch === 0;
-}
-
-/** Strip headers that only the SSO middleware is allowed to set. */
-function stripSpoofableHeaders(request: NextRequest): Headers {
-  const cleaned = new Headers(request.headers);
-  for (const h of SSO_INJECTED_HEADERS) cleaned.delete(h);
-  return cleaned;
-}
-
-function injectIdentity(headers: Headers, claims: JwtClaims): Headers {
-  const out = new Headers(headers);
-  out.set('x-maic-user', claims.sub);
-  if (claims.name) out.set('x-maic-name', claims.name);
-  if (claims.email) out.set('x-maic-email', claims.email);
-  if (claims.roles && claims.roles.length > 0) {
-    out.set('x-maic-roles', claims.roles.join(','));
-  }
-  if (claims.tenant) out.set('x-maic-tenant', claims.tenant);
-  if (claims.classroom) out.set('x-maic-classroom', claims.classroom);
-  if (claims.courses && claims.courses.length > 0) {
-    out.set('x-maic-courses', claims.courses.join(','));
-  }
-  return out;
-}
-
-function passThrough(headers: Headers): NextResponse {
-  return NextResponse.next({ request: { headers } });
+  const data  = enc.encode(timestamp);
+  const valid = await crypto.subtle.verify('HMAC', key, sigBytes, data);
+  return valid;
 }
 
 export async function middleware(request: NextRequest) {
-  const accessCode = process.env.ACCESS_CODE;
-  const ssoSecret = process.env.MAIC_LAUNCH_SECRET;
+  const authEnabled = process.env.AUTH_ENABLED === 'true';
+  const accessCode  = process.env.ACCESS_CODE;
 
-  // Always strip spoofable identity headers, even in open mode.
-  const cleanHeaders = stripSpoofableHeaders(request);
-
-  if (!accessCode && !ssoSecret) {
-    return passThrough(cleanHeaders);
+  if (!authEnabled && !accessCode) {
+    return NextResponse.next();
   }
 
   const { pathname } = request.nextUrl;
 
-  // Whitelist: access-code endpoints (sso, verify, status, logout, revoke)
-  // and health. Revoke is also gated by its own internal-token check.
-  if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {
-    return passThrough(cleanHeaders);
+  if (isPublicPath(pathname)) {
+    return NextResponse.next();
   }
 
-  // 1. SSO session cookie (preferred when MAIC_LAUNCH_SECRET is set).
-  if (ssoSecret) {
-    const session = request.cookies.get(SSO_SESSION_COOKIE)?.value;
-    if (session) {
-      try {
-        const claims = await verifyHs256Jwt(session, ssoSecret);
-        if (!isRevoked({ sub: claims.sub, jti: claims.jti, iat: claims.iat })) {
-          return passThrough(injectIdentity(cleanHeaders, claims));
-        }
-        // Revoked: fall through to legacy / unauth (and the stale cookie
-        // will be replaced or cleared on next sign-in / logout).
-      } catch {
-        // Fall through to legacy or unauthenticated handling.
-      }
+  // ---- AUTH_ENABLED mode: session-based auth (native or SSO) ----------------
+  if (authEnabled) {
+    if (hasSessionCookie(request)) {
+      // Session cookie present — pass through. Route handlers resolve
+      // identity via getSessionUser() directly. Upstream SSO x-maic-*
+      // headers pass through unmodified (Next.js forwards all request
+      // headers to route handlers by default).
+      return NextResponse.next();
     }
+
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, errorCode: 'UNAUTHORIZED', error: 'Authentication required' },
+        { status: 401 },
+      );
+    }
+
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = '/login';
+    loginUrl.searchParams.set('callbackUrl', pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
-  // 2. Legacy ACCESS_CODE cookie.
+  // ---- ACCESS_CODE mode: HMAC-verified cookie --------------------------------
   if (accessCode) {
-    const cookie = request.cookies.get(LEGACY_ACCESS_COOKIE)?.value;
-    if (cookie && (await verifyLegacyToken(cookie, accessCode))) {
-      return passThrough(cleanHeaders);
+    const cookie = request.cookies.get('openmaic_access');
+    if (cookie?.value && await verifyAccessToken(cookie.value, accessCode)) {
+      // Access code valid — pass through.
+      return NextResponse.next();
     }
+
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json(
+        { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
+        { status: 401 },
+      );
+    }
+
+    // Page request — let the frontend render the access-code modal
+    return NextResponse.next();
   }
 
-  // No valid auth.
-  if (pathname.startsWith('/api/')) {
-    return NextResponse.json(
-      {
-        success: false,
-        errorCode: 'INVALID_REQUEST',
-        error: 'Authentication required',
-      },
-      { status: 401 },
-    );
-  }
-
-  // Page requests fall through to the app so the existing access-code modal
-  // (or, in the SSO-only case, a future "launch from Space Agent" prompt) can
-  // render. This preserves the prior UX for legacy deployments.
-  return passThrough(cleanHeaders);
+  return NextResponse.next();
 }
 
 export const config = {
