@@ -3,7 +3,9 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   output: process.env.VERCEL ? undefined : 'standalone',
   transpilePackages: ['mathml2omml', 'pptxgenjs'],
-  serverExternalPackages: [],
+  // Phase 5a: better-sqlite3 uses native .node addon that can't be bundled.
+  // Mark as server external so Next.js includes it in standalone output.
+  serverExternalPackages: ['better-sqlite3'],
   experimental: {
     proxyClientMaxBodySize: '200mb',
   },
@@ -15,8 +17,6 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: [
-          // X-Frame-Options only supports SAMEORIGIN (no allow-list),
-          // so we omit it when custom ancestors are configured.
           ...(!extraAncestors ? [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }] : []),
           {
             key: 'Content-Security-Policy',
