@@ -24,6 +24,7 @@ const PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/api/access-code',  // SSO launch + legacy access-code endpoints
+  '/api/provision',    // server-to-server identity provisioning (internal-token gated)
 ];
 
 function isPublicPath(pathname: string): boolean {

@@ -12,7 +12,9 @@ let _db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!_db) {
-    mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    if (DB_PATH !== ':memory:') {
+      mkdirSync(path.dirname(DB_PATH), { recursive: true });
+    }
     _db = new Database(DB_PATH);
     _db.pragma('journal_mode = WAL');
     _db.pragma('foreign_keys = ON');
@@ -145,6 +147,32 @@ export function initAuthDb(): void {
 
   db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_classroom ON classroom_audit_log(classroom_id);`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_audit_changed_at ON classroom_audit_log(changed_at);`);
+
+  // ---------------------------------------------------------------------
+  // Identity map (Phase 5a): canonical email is the single user key shared
+  // with Space Agent. Legacy identifiers (Firebase-style hashes, raw Space
+  // Agent usernames) live in user_legacy_id so lookups by either canonical
+  // or legacy id resolve to the same canonical row.
+  // ---------------------------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_identity_map (
+      canonical_email TEXT PRIMARY KEY,
+      name            TEXT,
+      groups          TEXT NOT NULL DEFAULT '[]',
+      provisioned_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_legacy_id (
+      legacy_id       TEXT PRIMARY KEY,
+      canonical_email TEXT NOT NULL,
+      FOREIGN KEY (canonical_email) REFERENCES user_identity_map(canonical_email) ON DELETE CASCADE
+    );
+  `);
+
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_user_legacy_canonical ON user_legacy_id(canonical_email);`);
 
   console.log('[Auth] Extension database initialized at', DB_PATH);
 }

@@ -6,13 +6,15 @@
  * The SSO session cookie is itself an HS256 JWT (issued by
  * /api/access-code/sso after exchanging a short-lived launch JWT). On
  * every call we re-verify the signature, check exp/iat, validate iss/aud,
- * and consult the denylist. No DB round-trip.
+ * consult the denylist, and resolve the JWT.sub through the identity map
+ * so the returned id is the canonical email (Phase 5a).
  */
 
 import { groupsToRoles } from './groups';
 import { isRevoked } from './denylist';
 import { verifyHs256Jwt } from './verify';
 import { SSO_SESSION_COOKIE } from './cookies';
+import { resolveCanonical, getCanonicalUser } from './identity-map';
 
 export interface SsoUser {
   id: string;
@@ -63,13 +65,27 @@ export async function trySsoSession(headers: Headers): Promise<SsoUser | null> {
     return null;
   }
 
+  // Resolve the JWT subject through the identity map (Phase 5a). If a
+  // user_identity_map row exists for this sub — directly as canonical
+  // email or via a registered legacy id — the canonical email becomes
+  // the stable id. Falls back to the raw sub during the transition
+  // period before all users have been provisioned.
+  const canonicalId = resolveCanonical(claims.sub) || claims.sub;
+  const canonicalRow = canonicalId.includes('@') ? getCanonicalUser(canonicalId) : null;
+
   const groups = claims.space?.groups ?? [];
   const roles = groupsToRoles(groups);
 
+  // Prefer the JWT's own email/name claims when present; fall back to
+  // the canonical row's name; finally to the canonical email itself when
+  // the canonical id is an email shape.
+  const email = claims.email ?? (canonicalId.includes('@') ? canonicalId : null);
+  const name = claims.name ?? canonicalRow?.name ?? null;
+
   return {
-    id: claims.sub,
-    email: claims.email ?? null,
-    name: claims.name ?? null,
+    id: canonicalId,
+    email,
+    name,
     role: roles[0] ?? 'student',
     institution: claims.iss ?? null,
     ssoGroups: groups,
