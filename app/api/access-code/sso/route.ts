@@ -16,6 +16,18 @@
  *
  * The classroom is NOT in the JWT — it rides in `redirect` so the same
  * token shape works for any landing page.
+ *
+ * Cookie scope (cross-origin iframe support):
+ *   MAIC_COOKIE_DOMAIN       optional, e.g. ".coachingthegist.com" — makes the
+ *                            session cookie available across subdomains so it
+ *                            stops being treated as a third-party cookie when
+ *                            Space Agent embeds the classroom in an iframe.
+ *   MAIC_COOKIE_SAMESITE     "lax" | "none" | "strict". Defaults to "none"
+ *                            when COOKIE_DOMAIN is set (cross-site iframes
+ *                            require it), otherwise "lax".
+ *   MAIC_COOKIE_PARTITIONED  "true" opts the cookie into Chrome's CHIPS
+ *                            partitioned storage. Defaults to true when
+ *                            COOKIE_DOMAIN is set, otherwise false.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -27,6 +39,92 @@ import {
 import { groupsToRoles } from '@/lib/sso/groups';
 import { JwtVerifyError, signHs256Jwt, verifyHs256Jwt } from '@/lib/sso/verify';
 import { SSO_SESSION_COOKIE, SSO_SESSION_TTL_SECONDS } from '@/lib/sso/cookies';
+
+type SameSite = 'lax' | 'none' | 'strict';
+
+interface CookieAttrs {
+  domain?: string;
+  sameSite: SameSite;
+  partitioned: boolean;
+  secure: boolean;
+}
+
+/**
+ * Resolve cookie attributes from env. When MAIC_COOKIE_DOMAIN is set,
+ * SameSite auto-flips to 'none' and Secure is forced (browsers refuse to
+ * accept SameSite=None without Secure). Each value can be overridden via
+ * its own env var.
+ */
+function resolveCookieAttrs(): CookieAttrs {
+  const domain = process.env.MAIC_COOKIE_DOMAIN?.trim() || undefined;
+
+  const explicitSameSite = process.env.MAIC_COOKIE_SAMESITE?.trim().toLowerCase();
+  const sameSite: SameSite =
+    explicitSameSite === 'none' || explicitSameSite === 'lax' || explicitSameSite === 'strict'
+      ? (explicitSameSite as SameSite)
+      : domain
+        ? 'none'
+        : 'lax';
+
+  const explicitPartitioned = process.env.MAIC_COOKIE_PARTITIONED?.trim().toLowerCase();
+  const partitioned =
+    explicitPartitioned === 'true'
+      ? true
+      : explicitPartitioned === 'false'
+        ? false
+        : !!domain;
+
+  // Secure is required when SameSite=None or when Partitioned is set.
+  // In production we always want it; in dev we still need it whenever the
+  // cross-site cookie path is active.
+  const secure =
+    process.env.NODE_ENV === 'production' || sameSite === 'none' || partitioned;
+
+  return { domain, sameSite, partitioned, secure };
+}
+
+function sameSiteToken(s: SameSite): 'Lax' | 'None' | 'Strict' {
+  return s === 'none' ? 'None' : s === 'strict' ? 'Strict' : 'Lax';
+}
+
+/**
+ * Set the session cookie. NextResponse.cookies.set() doesn't expose the
+ * `Partitioned` attribute, so we build the Set-Cookie header manually when
+ * Partitioned is requested. The common (non-Partitioned) path uses the
+ * typed API and stays linter-friendly.
+ */
+function setSessionCookie(
+  response: NextResponse,
+  value: string,
+  ttlSeconds: number,
+): void {
+  const attrs = resolveCookieAttrs();
+
+  if (!attrs.partitioned) {
+    response.cookies.set(SSO_SESSION_COOKIE, value, {
+      httpOnly: true,
+      sameSite: attrs.sameSite,
+      path: '/',
+      maxAge: ttlSeconds,
+      secure: attrs.secure,
+      ...(attrs.domain ? { domain: attrs.domain } : {}),
+    });
+    return;
+  }
+
+  const parts: string[] = [
+    `${SSO_SESSION_COOKIE}=${value}`,
+    'Path=/',
+    `Max-Age=${ttlSeconds}`,
+    'HttpOnly',
+    `SameSite=${sameSiteToken(attrs.sameSite)}`,
+  ];
+  if (attrs.secure) parts.push('Secure');
+  if (attrs.domain) parts.push(`Domain=${attrs.domain}`);
+  parts.push('Partitioned');
+
+  response.headers.append('Set-Cookie', parts.join('; '));
+}
 
 function badLaunch(reason: string, status = 401) {
   return NextResponse.json(
@@ -99,13 +197,8 @@ export async function GET(request: NextRequest) {
   const target = safeRedirectPath(searchParams.get('redirect')) ?? '/';
 
   const response = NextResponse.redirect(new URL(target, appOrigin));
-  response.cookies.set(SSO_SESSION_COOKIE, sessionJwt, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SSO_SESSION_TTL_SECONDS,
-    secure: process.env.NODE_ENV === 'production',
-  });
+
+  setSessionCookie(response, sessionJwt, SSO_SESSION_TTL_SECONDS);
 
   // Useful for debugging: roles result is non-secret and helps verify
   // the group mapping landed as expected.
