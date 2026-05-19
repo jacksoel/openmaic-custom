@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return badLaunch('SSO not configured (MAIC_LAUNCH_SECRET missing)', 503);
   }
 
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
   const token = searchParams.get('token');
   if (!token) return badLaunch('missing token', 400);
 
@@ -91,9 +91,14 @@ export async function GET(request: NextRequest) {
 
   const sessionJwt = await signHs256Jwt(sessionClaims, secret);
 
+  // Use NEXT_PUBLIC_APP_URL for the redirect origin instead of request.nextUrl.origin.
+  // When the app runs behind a reverse proxy (Caddy), the request origin is the
+  // container-internal address (http://0.0.0.0:3001) which is unreachable from browsers.
+  // NEXT_PUBLIC_APP_URL is the canonical public URL (https://maic.colony5148351.ai).
+  const appOrigin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const target = safeRedirectPath(searchParams.get('redirect')) ?? '/';
 
-  const response = NextResponse.redirect(new URL(target, origin));
+  const response = NextResponse.redirect(new URL(target, appOrigin));
   response.cookies.set(SSO_SESSION_COOKIE, sessionJwt, {
     httpOnly: true,
     sameSite: 'lax',
