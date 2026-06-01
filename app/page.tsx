@@ -607,12 +607,11 @@ function HomePage() {
               {/* Interactive mode toggle */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                  <button
+                    type="button"
                     onClick={() => updateForm('interactiveMode', !form.interactiveMode)}
                     className={cn(
-                      'relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none whitespace-nowrap border shrink-0 h-8',
+                      'relative inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none whitespace-nowrap border shrink-0 h-8 active:scale-95',
                       form.interactiveMode
                         ? 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.35)] dark:shadow-[0_0_12px_rgba(6,182,212,0.25)]'
                         : 'border-cyan-300/60 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/20',
@@ -628,7 +627,7 @@ function HomePage() {
                     )}
                     <Atom className="size-3.5 relative z-10 animate-[spin_3s_linear_infinite]" />
                     <span className="relative z-10">{t('toolbar.interactiveModeLabel')}</span>
-                  </motion.button>
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
                   {t('toolbar.interactiveModeHint')}
