@@ -4,7 +4,7 @@ import {
   resolveWebSearchBaseUrl,
 } from '@/lib/server/provider-config';
 import { WEB_SEARCH_PROVIDERS } from '@/lib/web-search/constants';
-import type { WebSearchProviderId } from '@/lib/web-search/types';
+import type { BaiduSubSources, WebSearchProviderId } from '@/lib/web-search/types';
 
 const OFFICIAL_CLIENT_BASE_URLS: Record<WebSearchProviderId, string[]> = {
   tavily: ['https://api.tavily.com', 'https://api.tavily.com/search'],
@@ -15,6 +15,22 @@ const OFFICIAL_CLIENT_BASE_URLS: Record<WebSearchProviderId, string[]> = {
     'https://api.bochaai.com',
     'https://api.bochaai.com/v1',
     'https://api.bochaai.com/v1/web-search',
+  ],
+  brave: [
+    'https://search.brave.com',
+    'https://search.brave.com/search',
+    'https://api.search.brave.com',
+  ],
+  baidu: ['https://qianfan.baidubce.com'],
+  minimax: [
+    'https://api.minimaxi.com',
+    'https://api.minimaxi.com/v1',
+    'https://api.minimaxi.com/v1/coding_plan',
+    'https://api.minimaxi.com/v1/coding_plan/search',
+    'https://api.minimax.io',
+    'https://api.minimax.io/v1',
+    'https://api.minimax.io/v1/coding_plan',
+    'https://api.minimax.io/v1/coding_plan/search',
   ],
 };
 
@@ -61,7 +77,15 @@ export function resolveWebSearchRouteBaseUrl(
 export function resolveClassroomWebSearchConfig(input: {
   webSearchProviderId?: WebSearchProviderId;
   webSearchApiKey?: string;
-}): { providerId: WebSearchProviderId; apiKey: string; baseUrl?: string } | undefined {
+  baiduSubSources?: BaiduSubSources;
+}):
+  | {
+      providerId: WebSearchProviderId;
+      apiKey: string;
+      baseUrl?: string;
+      baiduSubSources?: BaiduSubSources;
+    }
+  | undefined {
   const requestedProviderId = assertWebSearchProviderId(input.webSearchProviderId)
     ? input.webSearchProviderId
     : undefined;
@@ -69,12 +93,16 @@ export function resolveClassroomWebSearchConfig(input: {
     requestedProviderId ?? (resolveServerWebSearchProviderId() as WebSearchProviderId | undefined);
   if (!providerId) return undefined;
 
+  const provider = WEB_SEARCH_PROVIDERS[providerId];
   const apiKey = resolveWebSearchApiKey(providerId, input.webSearchApiKey);
-  if (!apiKey) return undefined;
+  if (provider.requiresApiKey && !apiKey) return undefined;
 
   return {
     providerId,
     apiKey,
     baseUrl: resolveWebSearchBaseUrl(providerId),
+    ...(providerId === 'baidu' && input.baiduSubSources
+      ? { baiduSubSources: input.baiduSubSources }
+      : {}),
   };
 }

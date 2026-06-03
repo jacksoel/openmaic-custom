@@ -45,7 +45,8 @@
     "exportSuccess": "Экспорт успешен",
     "exportFailed": "Ошибка экспорта",
     "classroomZip": "Экспорт ZIP класса",
-    "classroomZipDesc": "Структура курса + медиафайлы"
+    "classroomZipDesc": "Структура курса + медиафайлы",
+    "inlinePartial": "Не удалось упаковать {{count}} внешн. ресурс(ов); курс может отображаться некорректно офлайн."
   },
   "import": {
     "classroom": "Импорт класса",
@@ -70,6 +71,10 @@
     "unknown": "Неизвестно",
     "stopDiscussion": "Завершить обсуждение",
     "endQA": "Завершить вопросы и ответы",
+    "error": {
+      "emptyAgentResponses": "Агенты вернули пустые ответы; обсуждение остановлено. Попробуйте ещё раз или проверьте настройки модели.",
+      "streamInterrupted": "Поток данных неожиданно прервался; обсуждение не завершено. Попробуйте ещё раз."
+    },
     "tabs": {
       "lecture": "Заметки",
       "chat": "Чат"
@@ -144,7 +149,72 @@
     "generatingNextPage": "Сцена генерируется, пожалуйста подождите...",
     "courseComplete": "Курс завершён",
     "fullscreen": "Полный экран",
-    "exitFullscreen": "Свернуть"
+    "exitFullscreen": "Свернуть",
+    "editCourse": "Редактировать курс",
+    "doneEditing": "Завершить редактирование"
+  },
+  "edit": {
+    "proMode": "Pro",
+    "undo": "Отменить",
+    "redo": "Повторить",
+    "delete": "Удалить",
+    "title": "Редактирование · {{type}}",
+    "unsupportedScene": "{{type}} пока нельзя редактировать",
+    "readOnlyBadge": "{{type}} · только просмотр",
+    "sceneType": {
+      "slide": "Слайд",
+      "quiz": "Тест",
+      "interactive": "Интерактив",
+      "pbl": "PBL"
+    },
+    "multiTab": {
+      "conflict": {
+        "title": "Этот курс уже редактируется в другой вкладке",
+        "body": "Редактирование возможно только в одной вкладке одновременно, чтобы избежать конфликтных изменений. Закройте другую вкладку (или дождитесь истечения её сеанса) перед входом в режим редактирования здесь.",
+        "actionDismiss": "Понятно"
+      }
+    },
+    "text": {
+      "label": "Текст",
+      "font": "Шрифт",
+      "fontDefault": "По умолчанию",
+      "sizeUp": "Увеличить размер",
+      "sizeDown": "Уменьшить размер",
+      "fontSize": "Размер шрифта",
+      "bold": "Полужирный",
+      "italic": "Курсив",
+      "underline": "Подчёркнутый",
+      "color": "Цвет текста",
+      "alignLeft": "По левому краю",
+      "alignCenter": "По центру",
+      "alignRight": "По правому краю",
+      "bullet": "Маркированный список"
+    },
+    "insert": {
+      "textBox": "Текстовое поле",
+      "expandToolbar": "Показать инструменты вставки",
+      "collapseToolbar": "Скрыть инструменты вставки",
+      "image": "Изображение",
+      "imageDrop": "Перетащите изображение или нажмите, чтобы выбрать файл",
+      "imageOr": "или вставьте URL изображения",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "Вставить"
+    },
+    "nav": {
+      "addSlide": "Добавить слайд",
+      "duplicate": "Дублировать",
+      "delete": "Удалить",
+      "deleted": "Удалено",
+      "undo": "Отменить",
+      "copySuffix": "(копия)",
+      "untitledSlide": "Безымянный слайд",
+      "collapse": "Свернуть панель",
+      "expand": "Развернуть панель",
+      "dragHandle": "Перетащите, чтобы переупорядочить",
+      "deckLabel": "Сцены",
+      "moreActions": "Ещё действия",
+      "rename": "Переименовать"
+    }
   },
   "classroomComplete": {
     "title": "Курс завершён",
@@ -449,8 +519,6 @@
     "multiAgentMode": "Мульти-агент",
     "agentsCollaborating": "Совместное обсуждение",
     "agentsCollaboratingCount": "{{count}} агентов выбрано для совместного обсуждения",
-    "maxTurns": "Максимум реплик",
-    "maxTurnsDesc": "Максимальное число реплик обсуждения между агентами (действие и ответ каждого агента считается одной репликой)",
     "priority": "Приоритет",
     "actions": "Действия",
     "actionCount": "{{count}} действий",
@@ -500,7 +568,9 @@
       "lemonade": "Lemonade (Локальный)",
       "ollama": "Ollama (Локальный)",
       "tavily": "Tavily",
-      "bocha": "Bocha"
+      "bocha": "Bocha",
+      "brave": "Brave Search",
+      "baidu": "Baidu"
     },
     "providerTypes": {
       "openai": "Протокол OpenAI",
@@ -524,7 +594,11 @@
     "apiHost": "Base URL",
     "baseUrlRegion": {
       "china": "Китай",
-      "international": "Международный"
+      "international": "Международный",
+      "xiaomiPayg": "Оплата по факту",
+      "xiaomiTokenPlanCN": "Token Plan Китай",
+      "xiaomiTokenPlanSGP": "Token Plan Сингапур",
+      "xiaomiTokenPlanEU": "Token Plan Европа"
     },
     "requestUrl": "URL запроса",
     "models": "Модели",
@@ -605,7 +679,6 @@
     "step3StartUsing": "После сохранения система будет использовать выбранную модель",
     "activeModel": "Активная модель",
     "activeModelDescription": "Выберите модель для AI-диалогов и генерации контента",
-    "selectModel": "Выбрать модель",
     "searchModels": "Поиск моделей",
     "noModelsFound": "Подходящих моделей не найдено",
     "noConfiguredProviders": "Нет настроенных провайдеров",
@@ -695,6 +768,7 @@
     "providerBrowserNative": "Встроенный ASR браузера",
     "providerQwenASR": "Qwen ASR (Alibaba Cloud Bailian)",
     "providerLemonadeASR": "Lemonade ASR (Локальный)",
+    "providerAzureASR": "Azure STT",
     "providerUnpdf": "unpdf (встроенный)",
     "providerMinerU": "MinerU",
     "providerMinerUCloud": "MinerU (Облако)",
@@ -988,7 +1062,7 @@
     "selectAgents": "Выбрать агентов",
     "noVisionWarning": "Текущая модель не поддерживает зрение. Изображения по-прежнему можно размещать на слайдах, но модель не сможет понимать содержимое изображений для оптимизации",
     "serverConfigured": "Сервер",
-    "serverConfiguredNotice": "Администратор настроил API-ключ для этого провайдера на сервере. Можете использовать его напрямую или ввести свой ключ.",
+    "serverConfiguredNotice": "Этот провайдер управляется сервером и не редактируется здесь. Чтобы использовать свои учётные данные, добавьте отдельного провайдера.",
     "optionalOverride": "Необязательно — оставьте пустым для серверной конфигурации",
     "setupNeeded": "Требуется настройка",
     "modelNotConfigured": "Пожалуйста, выберите модель для начала работы",
@@ -1008,6 +1082,16 @@
     "webSearchApiKeyPlaceholder": "Введите API-ключ поиска",
     "webSearchApiKeyPlaceholderServer": "Серверный ключ настроен, можно ввести свой",
     "webSearchApiKeyHint": "Получите API-ключ у выбранного поискового провайдера",
+    "webSearchApiKeyOptional": "API-ключ необязателен. Без него будет использоваться парсинг публичной страницы.",
+    "baiduSubSources": "Источники поиска Baidu",
+    "baiduSubSourcesDescription": "Выберите хотя бы один источник Baidu.",
+    "baiduSubSourceWeb": "Веб-поиск",
+    "baiduSubSourceWebDescription": "Обычные веб-результаты из Baidu AI Search.",
+    "baiduSubSourceBaike": "Baidu Baike",
+    "baiduSubSourceBaikeDescription": "Энциклопедические статьи из Baidu Baike.",
+    "baiduSubSourceScholar": "Baidu Scholar",
+    "baiduSubSourceScholarDescription": "Научные публикации из Baidu Scholar.",
+    "viewDocs": "API документация",
     "webSearchBaseUrl": "Base URL",
     "webSearchServerConfigured": "Серверный API-ключ поиска настроен",
     "optional": "Необязательно"

@@ -45,7 +45,8 @@
     "exportSuccess": "匯出成功",
     "exportFailed": "匯出失敗",
     "classroomZip": "匯出課堂 ZIP",
-    "classroomZipDesc": "課程結構 + 媒體檔案"
+    "classroomZipDesc": "課程結構 + 媒體檔案",
+    "inlinePartial": "{{count}} 個外部資源未能打包，離線時課程可能無法正常顯示。"
   },
   "import": {
     "classroom": "匯入課堂",
@@ -70,6 +71,10 @@
     "unknown": "未知",
     "stopDiscussion": "結束討論",
     "endQA": "結束問答",
+    "error": {
+      "emptyAgentResponses": "智能體連續無回應,討論已停止。請重新嘗試或檢查模型設定。",
+      "streamInterrupted": "資料串流意外中斷,討論未能完成。請重新嘗試。"
+    },
     "tabs": {
       "lecture": "筆記",
       "chat": "對話"
@@ -144,7 +149,72 @@
     "generatingNextPage": "場景正在生成，請稍候...",
     "fullscreen": "全螢幕",
     "exitFullscreen": "離開全螢幕",
-    "courseComplete": "課程完成"
+    "courseComplete": "課程完成",
+    "editCourse": "編輯課程",
+    "doneEditing": "完成編輯"
+  },
+  "edit": {
+    "proMode": "專業模式",
+    "undo": "復原",
+    "redo": "重做",
+    "delete": "刪除",
+    "title": "編輯 · {{type}}",
+    "unsupportedScene": "{{type}}暫不支援編輯",
+    "readOnlyBadge": "{{type}} · 僅檢視",
+    "sceneType": {
+      "slide": "投影片",
+      "quiz": "測驗",
+      "interactive": "互動",
+      "pbl": "PBL"
+    },
+    "multiTab": {
+      "conflict": {
+        "title": "另一個分頁正在編輯此課程",
+        "body": "編輯模式同一時間只允許一個分頁持有，以避免變更衝突。請先關閉其他分頁（或等待對方工作階段逾時），再於此處進入編輯模式。",
+        "actionDismiss": "知道了"
+      }
+    },
+    "text": {
+      "label": "文字",
+      "font": "字型",
+      "fontDefault": "預設",
+      "sizeUp": "放大字級",
+      "sizeDown": "縮小字級",
+      "fontSize": "字級",
+      "bold": "粗體",
+      "italic": "斜體",
+      "underline": "底線",
+      "color": "文字色彩",
+      "alignLeft": "靠左對齊",
+      "alignCenter": "置中對齊",
+      "alignRight": "靠右對齊",
+      "bullet": "項目符號"
+    },
+    "insert": {
+      "textBox": "文字方塊",
+      "expandToolbar": "展開插入工具",
+      "collapseToolbar": "收起插入工具",
+      "image": "圖片",
+      "imageDrop": "拖曳圖片或點按選擇檔案",
+      "imageOr": "或貼上圖片網址",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "插入"
+    },
+    "nav": {
+      "addSlide": "新增投影片",
+      "duplicate": "複製",
+      "delete": "刪除",
+      "deleted": "已刪除",
+      "undo": "復原",
+      "copySuffix": "（副本）",
+      "untitledSlide": "未命名投影片",
+      "collapse": "收合側欄",
+      "expand": "展開側欄",
+      "dragHandle": "拖曳重新排序",
+      "deckLabel": "場景",
+      "moreActions": "更多操作",
+      "rename": "重新命名"
+    }
   },
   "whiteboard": {
     "title": "互動白板",
@@ -434,8 +504,6 @@
     "multiAgentMode": "多智能體模式",
     "agentsCollaborating": "協作討論",
     "agentsCollaboratingCount": "已選擇 {{count}} 個智能體協作討論",
-    "maxTurns": "最大討論回合數",
-    "maxTurnsDesc": "智能體之間最多討論多少回合（每個智能體完成動作並回覆算一回合）",
     "priority": "優先順序",
     "actions": "動作",
     "actionCount": "{{count}} 個動作",
@@ -485,7 +553,9 @@
       "xiaomi": "小米 MiMo",
       "lemonade": "Lemonade（本機）",
       "tavily": "Tavily",
-      "bocha": "Bocha"
+      "bocha": "Bocha",
+      "brave": "Brave Search",
+      "baidu": "Baidu"
     },
     "providerTypes": {
       "openai": "OpenAI 協定",
@@ -586,7 +656,6 @@
     "step3StartUsing": "儲存設定後，系統將使用你選擇的模型",
     "activeModel": "使用模型",
     "activeModelDescription": "選擇目前用於 AI 對話和內容生成的模型",
-    "selectModel": "選擇模型",
     "searchModels": "搜尋模型",
     "noModelsFound": "未找到符合的模型",
     "noConfiguredProviders": "暫無已設定的供應商",
@@ -632,6 +701,7 @@
     "providerOpenAIWhisper": "OpenAI ASR (gpt-4o-mini-transcribe)",
     "providerBrowserNative": "瀏覽器原生 ASR",
     "providerLemonadeASR": "Lemonade ASR（本機）",
+    "providerAzureASR": "Azure STT（語音轉文字）",
     "providerQwenASR": "Qwen ASR（阿里雲百煉）",
     "providerUnpdf": "unpdf（內建）",
     "providerMinerU": "MinerU",
@@ -903,7 +973,7 @@
     "selectAgents": "選擇智能體",
     "noVisionWarning": "目前模型不支援視覺能力，圖片仍可放入投影片，但模型無法理解圖片內容來優化選擇和排版",
     "serverConfigured": "服務端",
-    "serverConfiguredNotice": "管理員已在服務端設定了此供應商的 API Key，可直接使用。也可輸入自己的 Key 覆蓋。",
+    "serverConfiguredNotice": "此供應商由服務端託管，無法在此修改。如需使用自己的憑證，請新增一個供應商。",
     "optionalOverride": "選填，留空則使用服務端設定",
     "setupNeeded": "請先完成設定",
     "modelNotConfigured": "請選擇一個模型以開始使用",
@@ -922,7 +992,17 @@
     "webSearchApiKey": "Tavily API Key",
     "webSearchApiKeyPlaceholder": "輸入你的 Tavily API Key",
     "webSearchApiKeyPlaceholderServer": "已設定服務端密鑰，選填覆蓋",
-    "webSearchApiKeyHint": "從 tavily.com 取得 API Key，用於網路搜尋",
+    "webSearchApiKeyHint": "從所選搜尋服務商取得 API Key，用於網路搜尋",
+    "webSearchApiKeyOptional": "API Key 為可選項。未填寫時將透過公開頁面抓取獲取結果。",
+    "baiduSubSources": "百度搜尋來源",
+    "baiduSubSourcesDescription": "請至少選擇一個百度資料來源。",
+    "baiduSubSourceWeb": "網頁搜尋",
+    "baiduSubSourceWebDescription": "使用百度 AI 搜尋取得一般網頁結果。",
+    "baiduSubSourceBaike": "百度百科",
+    "baiduSubSourceBaikeDescription": "使用百度百科取得詞條摘要。",
+    "baiduSubSourceScholar": "百度學術",
+    "baiduSubSourceScholarDescription": "使用百度學術取得論文結果。",
+    "viewDocs": "API 文檔",
     "webSearchBaseUrl": "Base URL",
     "webSearchServerConfigured": "已設定服務端 Tavily API Key",
     "optional": "選填",
@@ -930,7 +1010,11 @@
     "asrResultPlaceholder": "錄音完成後將顯示辨識結果",
     "baseUrlRegion": {
       "china": "中國",
-      "international": "國際"
+      "international": "國際",
+      "xiaomiPayg": "按量付費",
+      "xiaomiTokenPlanCN": "Token Plan 中國",
+      "xiaomiTokenPlanSGP": "Token Plan 新加坡",
+      "xiaomiTokenPlanEU": "Token Plan 歐洲"
     },
     "browserTTSNoVoices": "目前瀏覽器沒有可用的 TTS 聲音",
     "browserTTSNotSupported": "瀏覽器不支援語音合成 API",

@@ -21,12 +21,17 @@ import { useMediaGenerationStore } from '@/lib/store/media-generation';
 import { useExportPPTX } from '@/lib/export/use-export-pptx';
 import { useExportClassroom } from '@/lib/export/use-export-classroom';
 import { AuthNav } from './auth/auth-nav';
+import type { StageMode } from '@/lib/types/stage';
+import { HeaderControls } from './stage/header-controls';
 
 interface HeaderProps {
   readonly currentSceneTitle: string;
+  readonly mode?: StageMode;
+  readonly canEdit?: boolean;
+  readonly onToggleEditMode?: () => void;
 }
 
-export function Header({ currentSceneTitle }: HeaderProps) {
+export function Header({ currentSceneTitle, mode, canEdit, onToggleEditMode }: HeaderProps) {
   const { t } = useI18n();
   const router = useRouter();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -72,98 +77,104 @@ export function Header({ currentSceneTitle }: HeaderProps) {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div className="flex flex-col min-w-0">
-            <span className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-0.5">
-              {t('stage.currentScene')}
-            </span>
-            <h1
-              className="text-xl font-bold text-gray-800 dark:text-gray-200 tracking-tight truncate"
-              suppressHydrationWarning
-            >
-              {currentSceneTitle || t('common.loading')}
-            </h1>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-gray-100/50 dark:border-gray-700/50 shadow-sm shrink-0">
-          <LanguageSwitcher onOpen={() => {}} />
-
-          <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
-
-          <ThemeToggle />
-
-          <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
-
-          <div className="relative">
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
-            >
-              <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
-            </button>
-          </div>
-        </div>
-
-        {process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true' && <AuthNav />}
-
-        <div className="relative" ref={exportRef}>
-          <button
-            onClick={() => {
-              if (canExport && !isExporting && !isExportingZip) setExportMenuOpen(!exportMenuOpen);
-            }}
-            disabled={!canExport || isExporting || isExportingZip}
-            title={
-              canExport
-                ? isExporting || isExportingZip
-                  ? t('export.exporting')
-                  : t('export.pptx')
-                : t('share.notReady')
-            }
-            className={cn(
-              'shrink-0 p-2 rounded-full transition-all',
-              canExport && !isExporting && !isExportingZip
-                ? 'text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm'
-                : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50',
-            )}
-          >
-            {isExporting || isExportingZip ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
-            )}
-          </button>
-          {exportMenuOpen && (
-            <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden z-50 min-w-[200px]">
-              <button
-                onClick={() => { setExportMenuOpen(false); exportPPTX(); }}
-                className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2.5"
+          {mode !== 'edit' && (
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] uppercase tracking-widest font-bold text-gray-400 dark:text-gray-500 mb-0.5">
+                {t('stage.currentScene')}
+              </span>
+              <h1
+                className="text-xl font-bold text-gray-800 dark:text-gray-200 tracking-tight truncate"
+                suppressHydrationWarning
               >
-                <FileDown className="w-4 h-4 text-gray-400 shrink-0" />
-                <span>{t('export.pptx')}</span>
-              </button>
-              <button
-                onClick={() => { setExportMenuOpen(false); exportResourcePack(); }}
-                className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2.5"
-              >
-                <Package className="w-4 h-4 text-gray-400 shrink-0" />
-                <div>
-                  <div>{t('export.resourcePack')}</div>
-                  <div className="text-[11px] text-gray-400 dark:text-gray-500">{t('export.resourcePackDesc')}</div>
-                </div>
-              </button>
-              <button
-                onClick={() => { setExportMenuOpen(false); exportClassroomZip(); }}
-                disabled={isExportingZip}
-                className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2.5"
-              >
-                <Archive className="w-4 h-4 text-gray-400 shrink-0" />
-                <div>
-                  <div>{t('export.classroomZip')}</div>
-                  <div className="text-[11px] text-gray-400 dark:text-gray-500">{t('export.classroomZipDesc')}</div>
-                </div>
-              </button>
+                {currentSceneTitle || t('common.loading')}
+              </h1>
             </div>
           )}
+        </div>
+
+        <div className="flex items-center gap-4 shrink-0">
+          <HeaderControls mode={mode} canEdit={canEdit} onToggleEditMode={onToggleEditMode} />
+
+          <div className="flex items-center gap-4 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md px-2 py-1.5 rounded-full border border-gray-100/50 dark:border-gray-700/50 shadow-sm">
+            <LanguageSwitcher onOpen={() => {}} />
+
+            <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
+
+            <ThemeToggle />
+
+            <div className="w-[1px] h-4 bg-gray-200 dark:bg-gray-700" />
+
+            <div className="relative">
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="p-2 rounded-full text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm transition-all group"
+              >
+                <Settings className="w-4 h-4 group-hover:rotate-90 transition-transform duration-500" />
+              </button>
+            </div>
+          </div>
+
+          {process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true' && <AuthNav />}
+
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => {
+                if (canExport && !isExporting && !isExportingZip) setExportMenuOpen(!exportMenuOpen);
+              }}
+              disabled={!canExport || isExporting || isExportingZip}
+              title={
+                canExport
+                  ? isExporting || isExportingZip
+                    ? t('export.exporting')
+                    : t('export.pptx')
+                  : t('share.notReady')
+              }
+              className={cn(
+                'shrink-0 p-2 rounded-full transition-all',
+                canExport && !isExporting && !isExportingZip
+                  ? 'text-gray-400 dark:text-gray-500 hover:bg-white dark:hover:bg-gray-700 hover:text-gray-800 dark:hover:text-gray-200 hover:shadow-sm'
+                  : 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-50',
+              )}
+            >
+              {isExporting || isExportingZip ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+            </button>
+            {exportMenuOpen && (
+              <div className="absolute top-full mt-2 right-0 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg overflow-hidden z-50 min-w-[200px]">
+                <button
+                  onClick={() => { setExportMenuOpen(false); exportPPTX(); }}
+                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2.5"
+                >
+                  <FileDown className="w-4 h-4 text-gray-400 shrink-0" />
+                  <span>{t('export.pptx')}</span>
+                </button>
+                <button
+                  onClick={() => { setExportMenuOpen(false); exportResourcePack(); }}
+                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2.5"
+                >
+                  <Package className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div>
+                    <div>{t('export.resourcePack')}</div>
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500">{t('export.resourcePackDesc')}</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => { setExportMenuOpen(false); exportClassroomZip(); }}
+                  disabled={isExportingZip}
+                  className="w-full px-4 py-2.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2.5"
+                >
+                  <Archive className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div>
+                    <div>{t('export.classroomZip')}</div>
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500">{t('export.classroomZipDesc')}</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

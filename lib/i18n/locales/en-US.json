@@ -45,7 +45,8 @@
     "exportSuccess": "Export successful",
     "exportFailed": "Export failed",
     "classroomZip": "Export Classroom ZIP",
-    "classroomZipDesc": "Course structure + media files"
+    "classroomZipDesc": "Course structure + media files",
+    "inlinePartial": "{{count}} external asset(s) couldn't be bundled; the course may not display correctly offline."
   },
   "import": {
     "classroom": "Import Classroom",
@@ -70,6 +71,10 @@
     "unknown": "Unknown",
     "stopDiscussion": "Stop Discussion",
     "endQA": "End Q&A",
+    "error": {
+      "emptyAgentResponses": "Agents returned empty responses; discussion stopped. Try again or check your model settings.",
+      "streamInterrupted": "Stream ended unexpectedly; discussion didn't complete. Please try again."
+    },
     "tabs": {
       "lecture": "Notes",
       "chat": "Chat"
@@ -144,7 +149,72 @@
     "generatingNextPage": "Scene is being generated, please wait...",
     "courseComplete": "Course complete",
     "fullscreen": "Fullscreen",
-    "exitFullscreen": "Exit Fullscreen"
+    "exitFullscreen": "Exit Fullscreen",
+    "editCourse": "Edit course",
+    "doneEditing": "Done editing"
+  },
+  "edit": {
+    "proMode": "Pro",
+    "undo": "Undo",
+    "redo": "Redo",
+    "delete": "Delete",
+    "title": "Editing · {{type}}",
+    "unsupportedScene": "{{type}} is not editable yet",
+    "readOnlyBadge": "{{type}} · view-only",
+    "sceneType": {
+      "slide": "Slide",
+      "quiz": "Quiz",
+      "interactive": "Interactive",
+      "pbl": "PBL"
+    },
+    "multiTab": {
+      "conflict": {
+        "title": "Another tab is editing this course",
+        "body": "Editing is locked to a single tab to avoid conflicting changes. Close the other tab (or wait for its session to time out) before entering edit mode here.",
+        "actionDismiss": "Got it"
+      }
+    },
+    "text": {
+      "label": "Text",
+      "font": "Font",
+      "fontDefault": "Default",
+      "sizeUp": "Increase size",
+      "sizeDown": "Decrease size",
+      "fontSize": "Font size",
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "color": "Text color",
+      "alignLeft": "Align left",
+      "alignCenter": "Align center",
+      "alignRight": "Align right",
+      "bullet": "Bulleted list"
+    },
+    "insert": {
+      "textBox": "Text box",
+      "expandToolbar": "Show insert tools",
+      "collapseToolbar": "Hide insert tools",
+      "image": "Image",
+      "imageDrop": "Drop an image or click to choose a file",
+      "imageOr": "or paste an image URL",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "Insert"
+    },
+    "nav": {
+      "addSlide": "Add slide",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "deleted": "Deleted",
+      "undo": "Undo",
+      "copySuffix": "(copy)",
+      "untitledSlide": "Untitled slide",
+      "collapse": "Collapse rail",
+      "expand": "Expand rail",
+      "dragHandle": "Drag to reorder",
+      "deckLabel": "Scenes",
+      "moreActions": "More actions",
+      "rename": "Rename"
+    }
   },
   "classroomComplete": {
     "title": "Course complete",
@@ -449,8 +519,6 @@
     "multiAgentMode": "Multi-Agent Mode",
     "agentsCollaborating": "Collaborative Discussion",
     "agentsCollaboratingCount": "{{count}} agents selected for collaborative discussion",
-    "maxTurns": "Max Discussion Turns",
-    "maxTurnsDesc": "The maximum number of discussion turns between agents (each agent completes actions and reply counts as one turn)",
     "priority": "Priority",
     "actions": "Actions",
     "actionCount": "{{count}} actions",
@@ -500,7 +568,9 @@
       "lemonade": "Lemonade (Local)",
       "ollama": "Ollama (Local)",
       "tavily": "Tavily",
-      "bocha": "Bocha"
+      "bocha": "Bocha",
+      "brave": "Brave Search",
+      "baidu": "Baidu"
     },
     "providerTypes": {
       "openai": "OpenAI Protocol",
@@ -524,7 +594,11 @@
     "apiHost": "Base URL",
     "baseUrlRegion": {
       "china": "China",
-      "international": "International"
+      "international": "International",
+      "xiaomiPayg": "Pay-as-you-go",
+      "xiaomiTokenPlanCN": "Token Plan CN",
+      "xiaomiTokenPlanSGP": "Token Plan SG",
+      "xiaomiTokenPlanEU": "Token Plan EU"
     },
     "requestUrl": "Request URL",
     "models": "Models",
@@ -605,7 +679,6 @@
     "step3StartUsing": "After saving, the system will use your selected model",
     "activeModel": "Active Model",
     "activeModelDescription": "Select the model for AI conversations and content generation",
-    "selectModel": "Select Model",
     "searchModels": "Search models",
     "noModelsFound": "No matching models found",
     "noConfiguredProviders": "No configured providers",
@@ -695,6 +768,7 @@
     "providerBrowserNative": "Browser Native ASR",
     "providerQwenASR": "Qwen ASR (Alibaba Cloud Bailian)",
     "providerLemonadeASR": "Lemonade ASR (Local)",
+    "providerAzureASR": "Azure STT",
     "providerUnpdf": "unpdf (Built-in)",
     "providerMinerU": "MinerU",
     "providerMinerUCloud": "MinerU (Cloud)",
@@ -988,7 +1062,7 @@
     "selectAgents": "Select Agents",
     "noVisionWarning": "Current model does not support vision. Images can still be placed in slides, but the model cannot understand image content to optimize selection and layout",
     "serverConfigured": "Server",
-    "serverConfiguredNotice": "Admin has configured an API key for this provider on the server. You can use it directly or enter your own key to override.",
+    "serverConfiguredNotice": "This provider is managed by the server and can't be edited here. To use your own credentials, add a separate provider.",
     "optionalOverride": "Optional — leave empty to use server config",
     "setupNeeded": "Setup required",
     "modelNotConfigured": "Please select a model to get started",
@@ -1008,6 +1082,16 @@
     "webSearchApiKeyPlaceholder": "Enter your search API key",
     "webSearchApiKeyPlaceholderServer": "Server key configured, optionally override",
     "webSearchApiKeyHint": "Get an API key from the selected search provider",
+    "webSearchApiKeyOptional": "API key is optional. Without one, public page scraping will be used as a fallback.",
+    "baiduSubSources": "Baidu Search Sources",
+    "baiduSubSourcesDescription": "Choose at least one Baidu source to query.",
+    "baiduSubSourceWeb": "Web Search",
+    "baiduSubSourceWebDescription": "General web pages from Baidu AI Search.",
+    "baiduSubSourceBaike": "Baidu Baike",
+    "baiduSubSourceBaikeDescription": "Encyclopedia entries from Baidu Baike.",
+    "baiduSubSourceScholar": "Baidu Scholar",
+    "baiduSubSourceScholarDescription": "Academic papers from Baidu Scholar.",
+    "viewDocs": "API Docs",
     "webSearchBaseUrl": "Base URL",
     "webSearchServerConfigured": "Server-side search API key is configured",
     "optional": "Optional"

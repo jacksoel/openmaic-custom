@@ -45,7 +45,8 @@
     "classroomZipDesc": "هيكل المقرر + ملفات الوسائط",
     "exporting": "جارٍ التصدير...",
     "exportSuccess": "تم التصدير بنجاح",
-    "exportFailed": "فشل التصدير"
+    "exportFailed": "فشل التصدير",
+    "inlinePartial": "تعذّر تضمين {{count}} من الموارد الخارجية؛ قد لا يتم عرض الدورة بشكل صحيح دون اتصال بالإنترنت."
   },
   "import": {
     "classroom": "استيراد فصل",
@@ -70,6 +71,10 @@
     "unknown": "غير معروف",
     "stopDiscussion": "إيقاف النقاش",
     "endQA": "إنهاء الأسئلة والأجوبة",
+    "error": {
+      "emptyAgentResponses": "أعاد الوكلاء استجابات فارغة; توقف النقاش. حاول مرة أخرى أو راجع إعدادات النموذج.",
+      "streamInterrupted": "انتهى تدفق البيانات بشكل غير متوقع; لم يكتمل النقاش. يرجى المحاولة مرة أخرى."
+    },
     "tabs": {
       "lecture": "الملاحظات",
       "chat": "المحادثة"
@@ -144,7 +149,72 @@
     "generatingNextPage": "جارٍ توليد المشهد، يرجى الانتظار...",
     "courseComplete": "اكتملت الدورة",
     "fullscreen": "ملء الشاشة",
-    "exitFullscreen": "الخروج من ملء الشاشة"
+    "exitFullscreen": "الخروج من ملء الشاشة",
+    "editCourse": "تحرير الدورة",
+    "doneEditing": "إنهاء التحرير"
+  },
+  "edit": {
+    "proMode": "احترافي",
+    "undo": "تراجع",
+    "redo": "إعادة",
+    "delete": "حذف",
+    "title": "تحرير · {{type}}",
+    "unsupportedScene": "{{type}} غير قابل للتحرير بعد",
+    "readOnlyBadge": "{{type}} · للعرض فقط",
+    "sceneType": {
+      "slide": "شريحة",
+      "quiz": "اختبار",
+      "interactive": "تفاعلي",
+      "pbl": "PBL"
+    },
+    "multiTab": {
+      "conflict": {
+        "title": "علامة تبويب أخرى تحرّر هذه الدورة",
+        "body": "وضع التحرير محصور بعلامة تبويب واحدة في كل مرة لتجنب تعارض التغييرات. أغلق علامة التبويب الأخرى (أو انتظر انتهاء جلستها) قبل الدخول إلى وضع التحرير هنا.",
+        "actionDismiss": "حسناً"
+      }
+    },
+    "text": {
+      "label": "نص",
+      "font": "الخط",
+      "fontDefault": "افتراضي",
+      "sizeUp": "تكبير الحجم",
+      "sizeDown": "تصغير الحجم",
+      "fontSize": "حجم الخط",
+      "bold": "غامق",
+      "italic": "مائل",
+      "underline": "تسطير",
+      "color": "لون النص",
+      "alignLeft": "محاذاة لليسار",
+      "alignCenter": "توسيط",
+      "alignRight": "محاذاة لليمين",
+      "bullet": "قائمة نقطية"
+    },
+    "insert": {
+      "textBox": "مربع نص",
+      "expandToolbar": "إظهار أدوات الإدراج",
+      "collapseToolbar": "إخفاء أدوات الإدراج",
+      "image": "صورة",
+      "imageDrop": "أفلِت صورة أو انقر لاختيار ملف",
+      "imageOr": "أو الصق رابط صورة",
+      "imageUrlPlaceholder": "https://…",
+      "imageInsert": "إدراج"
+    },
+    "nav": {
+      "addSlide": "إضافة شريحة",
+      "duplicate": "تكرار",
+      "delete": "حذف",
+      "deleted": "تم الحذف",
+      "undo": "تراجع",
+      "copySuffix": "(نسخة)",
+      "untitledSlide": "شريحة بدون عنوان",
+      "collapse": "طي الشريط الجانبي",
+      "expand": "توسيع الشريط الجانبي",
+      "dragHandle": "اسحب لإعادة الترتيب",
+      "deckLabel": "المشاهد",
+      "moreActions": "إجراءات إضافية",
+      "rename": "إعادة تسمية"
+    }
   },
   "classroomComplete": {
     "title": "اكتملت الدورة",
@@ -449,8 +519,6 @@
     "multiAgentMode": "وضع متعدد الوكلاء",
     "agentsCollaborating": "نقاش تعاوني",
     "agentsCollaboratingCount": "تم اختيار {{count}} وكلاء للنقاش التعاوني",
-    "maxTurns": "الحد الأقصى لأدوار النقاش",
-    "maxTurnsDesc": "الحد الأقصى لعدد أدوار النقاش بين الوكلاء (كل وكيل يكمل الإجراءات والرد يُحسب كدور واحد)",
     "priority": "الأولوية",
     "actions": "الإجراءات",
     "actionCount": "{{count}} إجراءات",
@@ -500,7 +568,9 @@
       "lemonade": "Lemonade (محلي)",
       "ollama": "Ollama (محلي)",
       "tavily": "Tavily",
-      "bocha": "Bocha"
+      "bocha": "Bocha",
+      "brave": "Brave Search",
+      "baidu": "Baidu"
     },
     "providerTypes": {
       "openai": "بروتوكول OpenAI",
@@ -524,7 +594,11 @@
     "apiHost": "العنوان الأساسي",
     "baseUrlRegion": {
       "china": "الصين",
-      "international": "دولي"
+      "international": "دولي",
+      "xiaomiPayg": "الدفع حسب الاستخدام",
+      "xiaomiTokenPlanCN": "Token Plan الصين",
+      "xiaomiTokenPlanSGP": "Token Plan سنغافورة",
+      "xiaomiTokenPlanEU": "Token Plan أوروبا"
     },
     "requestUrl": "عنوان الطلب",
     "models": "النماذج",
@@ -605,7 +679,6 @@
     "step3StartUsing": "بعد الحفظ، سيستخدم النظام النموذج المحدد",
     "activeModel": "النموذج النشط",
     "activeModelDescription": "اختر النموذج لمحادثات الذكاء الاصطناعي وتوليد المحتوى",
-    "selectModel": "اختر النموذج",
     "searchModels": "البحث في النماذج",
     "noModelsFound": "لم يتم العثور على نماذج مطابقة",
     "noConfiguredProviders": "لا يوجد مزوّدون مُكوّنون",
@@ -695,6 +768,7 @@
     "providerBrowserNative": "التعرّف على الكلام المدمج في المتصفح",
     "providerQwenASR": "Qwen ASR (سحابة علي بابا بايليان)",
     "providerLemonadeASR": "Lemonade ASR (محلي)",
+    "providerAzureASR": "Azure STT",
     "providerUnpdf": "unpdf (مُدمج)",
     "providerMinerU": "MinerU",
     "providerMinerUCloud": "MinerU (السحابي)",
@@ -988,7 +1062,7 @@
     "selectAgents": "اختيار الوكلاء",
     "noVisionWarning": "النموذج الحالي لا يدعم الرؤية. يمكن وضع الصور في الشرائح، لكن النموذج لا يستطيع فهم محتوى الصور لتحسين الاختيار والتخطيط",
     "serverConfigured": "الخادم",
-    "serverConfiguredNotice": "قام المسؤول بتكوين مفتاح API لهذا المزوّد على الخادم. يمكنك استخدامه مباشرةً أو إدخال مفتاحك الخاص للتجاوز.",
+    "serverConfiguredNotice": "تتم إدارة هذا المزوّد من قبل الخادم ولا يمكن تعديله هنا. لاستخدام بيانات الاعتماد الخاصة بك، أضِف مزوّدًا منفصلاً.",
     "optionalOverride": "اختياري — اتركه فارغًا لاستخدام تكوين الخادم",
     "setupNeeded": "يلزم الإعداد",
     "modelNotConfigured": "يرجى اختيار نموذج للبدء",
@@ -1008,6 +1082,16 @@
     "webSearchApiKeyPlaceholder": "أدخل مفتاح API للبحث",
     "webSearchApiKeyPlaceholderServer": "تم تكوين مفتاح الخادم، يمكنك التجاوز اختياريًا",
     "webSearchApiKeyHint": "احصل على مفتاح API من مزود البحث المحدد",
+    "webSearchApiKeyOptional": "مفتاح API اختياري. بدونه، سيتم استخدام استخراج الصفحة العامة كبديل.",
+    "baiduSubSources": "مصادر بحث Baidu",
+    "baiduSubSourcesDescription": "اختر مصدر Baidu واحدًا على الأقل.",
+    "baiduSubSourceWeb": "بحث الويب",
+    "baiduSubSourceWebDescription": "نتائج ويب عامة من Baidu AI Search.",
+    "baiduSubSourceBaike": "Baidu Baike",
+    "baiduSubSourceBaikeDescription": "مقالات موسوعية من Baidu Baike.",
+    "baiduSubSourceScholar": "Baidu Scholar",
+    "baiduSubSourceScholarDescription": "أبحاث أكاديمية من Baidu Scholar.",
+    "viewDocs": "مستندات API",
     "webSearchBaseUrl": "العنوان الأساسي",
     "webSearchServerConfigured": "تم تكوين مفتاح API للبحث على الخادم",
     "optional": "اختياري"
