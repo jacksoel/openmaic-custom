@@ -5,6 +5,7 @@ services:
       args:
         NEXT_PUBLIC_APP_URL: https://maic.coachingthegist.com
         BETTER_AUTH_URL: https://maic.coachingthegist.com
+        NEXT_PUBLIC_MAIC_EDITOR_ENABLED: "true"
     env_file:
       - .env.local
     network_mode: host
