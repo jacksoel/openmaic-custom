@@ -35,6 +35,7 @@ function hasSessionCookie(request: NextRequest): boolean {
     'better-auth.session_token',
     '__Secure-better-auth.session_data',
     'better-auth.session_data',
+    'openmaic_session',
   ];
   return names.some(name => !!request.cookies.get(name)?.value);
 }
