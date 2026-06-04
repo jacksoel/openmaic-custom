@@ -32,6 +32,11 @@ import { AgentRevealModal } from '@/components/agent/agent-reveal-modal';
 import { createLogger } from '@/lib/logger';
 import { type GenerationSessionState, ALL_STEPS, getActiveSteps } from './types';
 import { StepVisualizer } from './components/visualizers';
+import {
+  assertAuthorizedGenerationResponse,
+  abortGenerationForLoginRedirect,
+  ensureAuthenticatedForGeneration,
+} from './generation-auth';
 
 const log = createLogger('GenerationPreview');
 const OUTLINE_REVIEW_AUTO_CONTINUE_MS = 2500;
@@ -51,6 +56,7 @@ function GenerationPreviewContent() {
 
   const [session, setSession] = useState<GenerationSessionState | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [authRedirectChecked, setAuthRedirectChecked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isComplete] = useState(false);
@@ -151,6 +157,27 @@ function GenerationPreviewContent() {
     setSessionLoaded(true);
   }, []);
 
+  // Require valid instructor/admin session before auto-starting generation APIs
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      if (process.env.NEXT_PUBLIC_AUTH_ENABLED !== 'true') {
+        if (!cancelled) setAuthRedirectChecked(true);
+        return;
+      }
+
+      const authenticated = await ensureAuthenticatedForGeneration(router);
+      if (!cancelled && authenticated) {
+        setAuthRedirectChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   // Abort all in-flight requests on unmount
   useEffect(() => {
     return () => {
@@ -194,7 +221,7 @@ function GenerationPreviewContent() {
 
   // Auto-start generation when session is loaded
   useEffect(() => {
-    if (!session || hasStartedRef.current) return;
+    if (!authRedirectChecked || !session || hasStartedRef.current) return;
     const needsOutlines = !session.sceneOutlines || session.sceneOutlines.length === 0;
     const phase = session.previewPhase;
     const shouldAutoStart =
@@ -229,6 +256,9 @@ function GenerationPreviewContent() {
     setCurrentStepIndex(0);
 
     try {
+      const authenticated = await ensureAuthenticatedForGeneration(router);
+      if (!authenticated) return;
+
       // Compute active steps for this session (recomputed after session mutations)
       let activeSteps = getActiveSteps(currentSession);
 
@@ -281,6 +311,7 @@ function GenerationPreviewContent() {
           signal,
         });
 
+        assertAuthorizedGenerationResponse(parseResponse);
         if (!parseResponse.ok) {
           const errorData = await parseResponse.json();
           throw new Error(errorData.error || t('generation.pdfParseFailed'));
@@ -404,6 +435,7 @@ function GenerationPreviewContent() {
           signal,
         });
 
+        assertAuthorizedGenerationResponse(res);
         if (!res.ok) {
           const data = await res.json().catch(() => ({ error: 'Web search failed' }));
           throw new Error(data.error || t('generation.webSearchFailed'));
@@ -485,6 +517,10 @@ function GenerationPreviewContent() {
             signal,
           })
             .then((res) => {
+              if (res.status === 401) {
+                abortGenerationForLoginRedirect();
+                return;
+              }
               if (!res.ok) {
                 return res.json().then((d) => {
                   reject(new Error(d.error || t('generation.outlineGenerateFailed')));
@@ -708,6 +744,7 @@ function GenerationPreviewContent() {
             signal,
           });
 
+          assertAuthorizedGenerationResponse(agentResp);
           if (!agentResp.ok) throw new Error('Agent generation failed');
           const agentData = await agentResp.json();
           if (!agentData.success) throw new Error(agentData.error || 'Agent generation failed');
@@ -824,6 +861,7 @@ function GenerationPreviewContent() {
         signal,
       });
 
+      assertAuthorizedGenerationResponse(contentResp);
       if (!contentResp.ok) {
         const errorData = await contentResp.json().catch(() => ({ error: 'Request failed' }));
         throw new Error(errorData.error || t('generation.sceneGenerateFailed'));
@@ -856,6 +894,7 @@ function GenerationPreviewContent() {
         signal,
       });
 
+      assertAuthorizedGenerationResponse(actionsResp);
       if (!actionsResp.ok) {
         const errorData = await actionsResp.json().catch(() => ({ error: 'Request failed' }));
         throw new Error(errorData.error || t('generation.sceneGenerateFailed'));
@@ -909,6 +948,7 @@ function GenerationPreviewContent() {
               }),
               signal,
             });
+            assertAuthorizedGenerationResponse(resp);
             if (!resp.ok) {
               ttsFailCount++;
               continue;
@@ -1099,8 +1139,8 @@ function GenerationPreviewContent() {
     void startGeneration(confirmedSession);
   };
 
-  // Still loading session from sessionStorage
-  if (!sessionLoaded) {
+  // Still loading session from sessionStorage or verifying auth
+  if (!sessionLoaded || (process.env.NEXT_PUBLIC_AUTH_ENABLED === 'true' && !authRedirectChecked)) {
     return (
       <div className="min-h-[100dvh] w-full bg-gradient-to-b from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 flex items-center justify-center p-4">
         <div className="text-center text-muted-foreground">
