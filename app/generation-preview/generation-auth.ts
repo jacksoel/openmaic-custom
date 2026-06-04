@@ -37,7 +37,9 @@ export async function ensureAuthenticatedForGeneration(router: {
     return true;
   }
 
-  const sessionResult = await authClient.getSession();
+  const sessionResult = (await authClient.getSession()) as {
+    data?: { user?: { role?: string } };
+  };
   const user = sessionResult?.data?.user;
   if (!user) {
     redirectToGenerationPreviewLogin();
