@@ -18,6 +18,7 @@ const PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/api/access-code',  // legacy access-code — remove once ACCESS_CODE mode is retired
+  '/api/classroom/launch-list', // server-to-server; route verifies Bearer launch JWT itself
 ];
 
 function isPublicPath(pathname: string): boolean {
