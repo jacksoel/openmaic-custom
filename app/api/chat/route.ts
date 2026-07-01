@@ -113,11 +113,16 @@ export async function POST(req: NextRequest) {
       model: languageModel,
       apiKey: resolvedApiKey,
       providerId,
+      thinkingConfig: resolvedThinking,
     } = await resolveModel({
       modelString: effectiveModel,
+      stage: 'chat-adapter',
       apiKey: effectiveApiKey,
       baseUrl: effectiveBaseUrl,
       providerType: body.providerType,
+      // Let resolveModel arbitrate thinking too: a routed chat-adapter's thinking
+      // wins, an unrouted one honors this client thinking (see resolve-model.ts).
+      thinkingConfig: body.thinkingConfig ?? body.thinking,
     });
 
     if (isProviderKeyRequired(providerId) && !resolvedApiKey) {
@@ -160,7 +165,7 @@ export async function POST(req: NextRequest) {
       try {
         startHeartbeat();
 
-        const thinkingConfig: ThinkingConfig = body.thinkingConfig ??
+        const thinkingConfig: ThinkingConfig = resolvedThinking ?? body.thinkingConfig ??
           body.thinking ?? { mode: 'disabled', enabled: false };
 
         const generator = statelessGenerate(

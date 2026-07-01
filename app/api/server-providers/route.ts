@@ -7,6 +7,7 @@ import {
   getServerImageProviders,
   getServerVideoProviders,
   getServerWebSearchProviders,
+  getParallelSceneConcurrency,
 } from '@/lib/server/provider-config';
 import { canUseProvider } from '@/lib/server/provider-resolver';
 import { getSessionUser } from '@/lib/auth';
@@ -44,6 +45,9 @@ export async function GET(req: NextRequest) {
       image: getServerImageProviders(),
       video: getServerVideoProviders(),
       webSearch: getServerWebSearchProviders(),
+      generation: {
+        parallelSceneConcurrency: getParallelSceneConcurrency(),
+      },
     });
   } catch (error) {
     log.error('Error fetching server providers:', error);

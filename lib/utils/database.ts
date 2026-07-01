@@ -9,6 +9,7 @@ import type {
   ToolCallRequest,
 } from '@/lib/types/chat';
 import type { SceneOutline } from '@/lib/types/generation';
+import type { VoiceDesign } from '@/lib/audio/voice-design';
 import type { UIMessage } from 'ai';
 import { createLogger } from '@/lib/logger';
 
@@ -50,6 +51,7 @@ export interface StageRecord {
   agentIds?: string[]; // Agent IDs selected at creation time
   videoManifest?: VideoManifest; // Generated video request manifest; non-indexed
   interactiveMode?: boolean; // Interactive Mode flag; non-indexed
+  taskEngineMode?: boolean; // Vocational Task Engine flag; non-indexed
 }
 
 /**
@@ -130,6 +132,10 @@ export interface PlaybackStateRecord {
 export interface StageOutlinesRecord {
   stageId: string; // Primary key (FK -> stages.id)
   outlines: SceneOutline[];
+  // True once generation finished for this stage. Gates resume-on-mount so an
+  // edited (e.g. slide-deleted) finished deck is not treated as "interrupted"
+  // and regenerated. Optional for backward compat with pre-existing records.
+  generationComplete?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -166,6 +172,7 @@ export interface GeneratedAgentRecord {
   avatar: string;
   color: string;
   priority: number;
+  voiceDesign?: VoiceDesign; // 3-layer vocal descriptor for auto voice
   createdAt: number;
 }
 
@@ -186,6 +193,18 @@ export interface VoiceProfileRecord {
   updatedAt: number;
 }
 
+/**
+ * Cached reference clip for a registered auto voice (any TTS provider). The
+ * clip is the source of truth; the deterministic `voiceId` is its key, enabling
+ * register-on-invalid re-registration after backend GC/restart.
+ */
+export interface AutoVoiceCacheRecord {
+  voiceId: string;
+  referenceAudio: Blob;
+  mimeType: string;
+  updatedAt: number;
+}
+
 /** Build the compound primary key for mediaFiles: `${stageId}:${elementId}` */
 export function mediaFileKey(stageId: string, elementId: string): string {
   return `${stageId}:${elementId}`;
@@ -194,7 +213,7 @@ export function mediaFileKey(stageId: string, elementId: string): string {
 // ==================== Database Definition ====================
 
 const DATABASE_NAME = 'MAIC-Database';
-const _DATABASE_VERSION = 10;
+const _DATABASE_VERSION = 11;
 
 /**
  * MAIC Database Instance
@@ -212,6 +231,7 @@ class MAICDatabase extends Dexie {
   mediaFiles!: EntityTable<MediaFileRecord, 'id'>;
   generatedAgents!: EntityTable<GeneratedAgentRecord, 'id'>;
   voiceProfiles!: EntityTable<VoiceProfileRecord, 'id'>;
+  autoVoiceCache!: EntityTable<AutoVoiceCacheRecord, 'voiceId'>;
 
   constructor() {
     super(DATABASE_NAME);
@@ -377,6 +397,22 @@ class MAICDatabase extends Dexie {
       mediaFiles: 'id, stageId, [stageId+type]',
       generatedAgents: 'id, stageId',
       voiceProfiles: 'id, providerId, kind, updatedAt',
+    });
+
+    // Version 11: Add auto-voice reference-clip cache (provider-neutral register-by-id).
+    this.version(11).stores({
+      stages: 'id, updatedAt',
+      scenes: 'id, stageId, order, [stageId+order]',
+      audioFiles: 'id, createdAt',
+      imageFiles: 'id, createdAt',
+      snapshots: '++id',
+      chatSessions: 'id, stageId, [stageId+createdAt]',
+      playbackState: 'stageId',
+      stageOutlines: 'stageId',
+      mediaFiles: 'id, stageId, [stageId+type]',
+      generatedAgents: 'id, stageId',
+      voiceProfiles: 'id, providerId, kind, updatedAt',
+      autoVoiceCache: 'voiceId, updatedAt',
     });
   }
 }

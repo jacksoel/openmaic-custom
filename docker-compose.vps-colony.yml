@@ -1,0 +1,10 @@
+# Colony VPS env-chain overlay (openclaw-writable; supersedes root-owned compose edits)
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.openmaic.yml -f docker-compose.vps-colony.yml up -d --build
+
+services:
+  openmaic:
+    environment:
+      PORT: "3001"
+    env_file:
+      - /home/openclaw/.openclaw/.env
