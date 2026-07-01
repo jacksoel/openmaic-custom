@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   LAUNCH_AUDIENCE,
@@ -100,13 +99,11 @@ export async function GET(request: NextRequest) {
     revokeJti(launchJti);
   }
 
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, sessionToken, buildSessionCookieOptions());
-
   const response = NextResponse.redirect(
     new URL(redirectPath, publicAppOrigin(request)),
     307,
   );
+  response.cookies.set(SESSION_COOKIE_NAME, sessionToken, buildSessionCookieOptions());
   response.headers.set('x-maic-role-resolved', primaryRole);
   return response;
 }

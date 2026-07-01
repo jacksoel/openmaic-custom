@@ -5,6 +5,14 @@
 export type { Role }     from './auth-types';
 export type { AuthUser } from './auth-types';
 
+import type { Role } from './auth-types';
+import { verifyHs256Jwt } from './sso/jwt';
+import {
+  SESSION_AUDIENCE,
+  SESSION_COOKIE_NAME,
+  SESSION_ISSUER,
+} from './sso/claims';
+
 // ---------------------------------------------------------------------------
 // Singleton promise — prevents concurrent initialisation races.
 // On failure the promise is cleared so the next call can retry.
@@ -146,9 +154,52 @@ export async function getSessionUser(req: { headers: Headers }) {
 
   try {
     const session = await auth.api.getSession({ headers });
-    return session?.user ?? null;
+    if (session?.user) return session.user;
   } catch (err) {
     console.error('[Auth] getSessionUser error:', err);
-    return null;
   }
+
+  // SSO fallback: Space Agent launches set an `openmaic_session` HS256 JWT that
+  // better-auth never issues or sees. Honor it here so SSO users satisfy the
+  // same getSessionUser() contract (id/email/name/role) as native users.
+  return getSsoSessionUser(headers);
+}
+
+function readCookieValue(cookieHeader: string, cookieName: string): string | null {
+  for (const part of cookieHeader.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === cookieName) {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+  }
+  return null;
+}
+
+function getSsoSessionUser(headers: Headers) {
+  const launchSecret = process.env.MAIC_LAUNCH_SECRET;
+  if (!launchSecret) return null;
+
+  const sessionToken = readCookieValue(headers.get('cookie') || '', SESSION_COOKIE_NAME);
+  if (!sessionToken) return null;
+
+  const verified = verifyHs256Jwt(sessionToken, launchSecret);
+  if (!verified.ok) return null;
+
+  const payload = verified.payload;
+  if (payload.iss !== SESSION_ISSUER || payload.aud !== SESSION_AUDIENCE) return null;
+  if (!payload.sub || typeof payload.sub !== 'string') return null;
+
+  const roles = Array.isArray(payload.roles) ? payload.roles.map(String) : [];
+  const role = normalizeRole(roles[0]) as Role;
+  const name = typeof payload.name === 'string' && payload.name ? payload.name : payload.sub;
+  const email = typeof payload.email === 'string' ? payload.email : '';
+
+  return {
+    id: payload.sub,
+    email,
+    name,
+    role,
+    sessionType: 'sso' as const,
+  };
 }

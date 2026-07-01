@@ -134,6 +134,8 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
     // Scene switch confirmation dialog state
     const [pendingSceneId, setPendingSceneId] = useState<string | null>(null);
     const [isPresenting, setIsPresenting] = useState(false);
+    const [isEmbeddedPresenting, setIsEmbeddedPresenting] = useState(false);
+    const presentationKindRef = useRef<'none' | 'native' | 'embedded'>('none');
     const [controlsVisible, setControlsVisible] = useState(true);
     const [isPresentationInteractionActive, setIsPresentationInteractionActive] = useState(false);
 
@@ -326,39 +328,83 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
       }
     }, [clearPresentationIdleTimer, isPresenting, isPresentationInteractionActive]);
 
-    const togglePresentation = useCallback(async () => {
+    const enterEmbeddedPresentation = useCallback(() => {
+      presentationKindRef.current = 'embedded';
+      setIsEmbeddedPresenting(true);
+      setIsPresenting(true);
+      setControlsVisible(true);
+      setSidebarCollapsed(true);
+      setChatAreaCollapsed(true);
+    }, [setChatAreaCollapsed, setSidebarCollapsed]);
+
+    const exitPresentation = useCallback(() => {
+      if (presentationKindRef.current === 'embedded') {
+        presentationKindRef.current = 'none';
+        setIsEmbeddedPresenting(false);
+        setIsPresenting(false);
+        setControlsVisible(true);
+        clearPresentationIdleTimer();
+        return;
+      }
+
+      if (document.fullscreenElement === stageRef.current) {
+        // Unlock Escape key before exiting fullscreen
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (navigator as any).keyboard?.unlock?.();
+        void document.exitFullscreen().catch(() => {});
+      }
+    }, [clearPresentationIdleTimer]);
+
+    const togglePresentation = useCallback(() => {
       const stageElement = stageRef.current;
       if (!stageElement) return;
 
-      try {
-        if (document.fullscreenElement === stageElement) {
-          // Unlock Escape key before exiting fullscreen
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (navigator as any).keyboard?.unlock?.();
-          await document.exitFullscreen();
-          return;
-        }
-
-        setControlsVisible(true);
-        await stageElement.requestFullscreen();
-        // Lock Escape key so it doesn't auto-exit fullscreen (#255)
-        // Escape is handled manually in our keydown handler instead
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (navigator as any).keyboard?.lock?.(['Escape']).catch(() => {});
-        setSidebarCollapsed(true);
-        setChatAreaCollapsed(true);
-      } catch {
-        // Firefox may deny fullscreen from certain keyboard events (e.g. F11)
-        console.warn('[Presentation] Fullscreen request denied — browser policy');
+      if (
+        presentationKindRef.current === 'embedded' ||
+        document.fullscreenElement === stageElement
+      ) {
+        exitPresentation();
+        return;
       }
-    }, [setChatAreaCollapsed, setSidebarCollapsed]);
+
+      setControlsVisible(true);
+      const request = stageElement.requestFullscreen();
+      void request
+        .then(() => {
+          presentationKindRef.current = 'native';
+          // Lock Escape key so it doesn't auto-exit fullscreen (#255)
+          // Escape is handled manually in our keydown handler instead
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (navigator as any).keyboard?.lock?.(['Escape']).catch(() => {});
+          setSidebarCollapsed(true);
+          setChatAreaCollapsed(true);
+        })
+        .catch(() => {
+          const isEmbedded = window.self !== window.top;
+          if (isEmbedded) {
+            // Cross-origin iframe embeds often block requestFullscreen even with
+            // allow="fullscreen" on the parent. Fill the iframe viewport instead.
+            enterEmbeddedPresentation();
+            return;
+          }
+          // Firefox may deny fullscreen from certain keyboard events (e.g. F11)
+          console.warn('[Presentation] Fullscreen request denied — browser policy');
+        });
+    }, [enterEmbeddedPresentation, exitPresentation, setChatAreaCollapsed, setSidebarCollapsed]);
 
     useEffect(() => {
       const onFullscreenChange = () => {
         const active = document.fullscreenElement === stageRef.current;
-        setIsPresenting(active);
+        if (active) {
+          presentationKindRef.current = 'native';
+          setIsEmbeddedPresenting(false);
+          setIsPresenting(true);
+          return;
+        }
 
-        if (!active) {
+        if (presentationKindRef.current === 'native') {
+          presentationKindRef.current = 'none';
+          setIsPresenting(false);
           // Ensure keyboard unlock on any fullscreen exit
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (navigator as any).keyboard?.unlock?.();
@@ -1017,6 +1063,7 @@ export const PlaybackChromeRoot = forwardRef<PlaybackChromeRootHandle, PlaybackC
         ref={stageRef}
         className={cn(
           'flex-1 flex overflow-hidden bg-gray-50 dark:bg-gray-900',
+          isEmbeddedPresenting && 'fixed inset-0 z-[9999] h-full w-full max-w-none',
           isPresenting && !controlsVisible && 'cursor-none',
         )}
       >
