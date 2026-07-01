@@ -36,8 +36,8 @@ import type {
 import { apiError } from '@/lib/server/api-response';
 import { createLogger } from '@/lib/logger';
 import { resolveModelFromRequest } from '@/lib/server/resolve-model';
-import { getSessionUser, isInstructorOrAbove } from @/lib/auth;
-import { resolveVocationalActive } from @/lib/config/feature-flags;
+import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
+import { resolveVocationalActive } from '@/lib/config/feature-flags';
 const log = createLogger('Outlines Stream');
 
 export const maxDuration = 300;

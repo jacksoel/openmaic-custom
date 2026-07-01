@@ -24,8 +24,8 @@ import { createLogger } from '@/lib/logger';
 import { apiError, apiSuccess } from '@/lib/server/api-response';
 import { llmApiError } from '@/lib/server/llm-error-response';
 import { resolveModelFromRequest } from '@/lib/server/resolve-model';
-import { getSessionUser, isInstructorOrAbove } from @/lib/auth;
-import { resolveVocationalActive } from @/lib/config/feature-flags;
+import { getSessionUser, isInstructorOrAbove } from '@/lib/auth';
+import { resolveVocationalActive } from '@/lib/config/feature-flags';
 
 const log = createLogger('Scene Content API');
 
